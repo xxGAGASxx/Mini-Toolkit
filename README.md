@@ -1,2 +1,6 @@
 # Mini-Toolkit
-Varius Web based tools
+Various Web based tools
+
+## Frame Notes
+
+## Sprite Cutter
