@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini Toolkit</title>
+<style>
+  :root {
+    --bg: #f6f8fa; --fg: #1f2328; --mut: #656d76; --line: #d0d7de; --acc: #0969da;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161b22; --fg: #e6edf3; --mut: #8d96a0; --line: #30363d; --acc: #4493f8; }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  [role="tablist"] { flex: none; display: flex; gap: 4px; padding: 0 8px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  [role="tab"] { flex: none; padding: 9px 14px 7px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--mut); font: inherit; cursor: pointer; }
+  [role="tab"]:hover { color: var(--fg); }
+  [role="tab"][aria-selected="true"] { color: var(--fg); font-weight: 600; border-bottom-color: var(--acc); }
+  [role="tab"]:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }
+
+  main { position: relative; flex: 1; min-height: 0; }
+  /* Stacked and hidden with visibility, not display:none. A hidden tool keeps its
+     full size, so its canvases and scroll positions are untouched while it waits. */
+  [role="tabpanel"] { position: absolute; inset: 0; visibility: hidden; }
+  [role="tabpanel"].active { visibility: visible; }
+  iframe { display: block; width: 100%; height: 100%; border: 0; }
+</style>
+</head>
+<body>
+<div id="tabs" role="tablist" aria-label="Tools">
+  <button role="tab" id="tab-frames" aria-controls="panel-frames" aria-selected="true">Frame Notes</button>
+  <button role="tab" id="tab-md" aria-controls="panel-md" aria-selected="false" tabindex="-1">MD Compare</button>
+  <button role="tab" id="tab-sprites" aria-controls="panel-sprites" aria-selected="false" tabindex="-1">Sprite Cutter</button>
+</div>
+<main>
+  <div role="tabpanel" id="panel-frames" aria-labelledby="tab-frames" class="active"><iframe src="FrameNotes/frame_notes.html" title="Frame Notes"></iframe></div>
+  <div role="tabpanel" id="panel-md" aria-labelledby="tab-md"><iframe src="MD-Comparer/md-comparer.html" title="MD Compare"></iframe></div>
+  <div role="tabpanel" id="panel-sprites" aria-labelledby="tab-sprites"><iframe src="SpriteCutter/sprite-cutter.html" title="Sprite Cutter"></iframe></div>
+</main>
+<script>
+  const tablist = document.getElementById('tabs');
+  const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+  const panelOf = (tab) => document.getElementById(tab.getAttribute('aria-controls'));
+
+  function select(tab) {
+    for (const t of tabs) {
+      const on = t === tab;
+      t.setAttribute('aria-selected', on);
+      t.tabIndex = on ? 0 : -1;
+      panelOf(t).classList.toggle('active', on);
+    }
+  }
+
+  tablist.addEventListener('click', (e) => {
+    const tab = e.target.closest('[role="tab"]');
+    if (!tab) return;
+    select(tab);
+    // Hand focus to the tool so its keyboard shortcuts work straight away.
+    panelOf(tab).querySelector('iframe').focus();
+  });
+
+  tablist.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement), n = tabs.length;
+    const next = { ArrowRight: tabs[(i + 1) % n], ArrowLeft: tabs[(i - 1 + n) % n], Home: tabs[0], End: tabs[n - 1] }[e.key];
+    if (!next) return;
+    e.preventDefault();
+    select(next);
+    next.focus();
+  });
+
+  // A file dropped on the tab bar would otherwise navigate this page away and wipe every tool.
+  addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'none'; });
+  addEventListener('drop', (e) => e.preventDefault());
+</script>
+</body>
+</html>
