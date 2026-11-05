@@ -1,0 +1,1199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Debug</title>
+<style>
+:root{
+  --bg:#0e1013; --panel:#15181d; --panel-2:#1b1f26; --line:#262c35; --line-2:#333b47;
+  --text:#d9dee6; --dim:#8b95a5; --faint:#5f6876; --accent:#4cc2ff; --accent-bg:rgba(76,194,255,.13);
+  --ok:#5fd38d; --warn:#f2b94b; --bad:#ff5d6e;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+body{display:grid;grid-template-columns:minmax(0,1fr) 300px}
+button,select,input{font:inherit;color:inherit}
+[hidden]{display:none!important}
+
+/* viewport */
+#view{position:relative;overflow:hidden;background:radial-gradient(120% 90% at 50% 35%,#2a3039 0%,#171a1f 58%,#0e1013 100%)}
+#view canvas.gl{position:absolute;inset:0;display:block;outline:none;touch-action:none}
+#empty{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;padding:16px}
+#empty .card{pointer-events:auto;text-align:center;padding:34px 40px;border:1.5px dashed #3b4451;border-radius:14px;background:rgba(14,16,19,.6);backdrop-filter:blur(4px);max-width:430px}
+#empty h3{margin:12px 0 6px;font-size:16px;font-weight:600}
+#empty p{margin:0 0 16px;color:var(--dim)}
+#drop{position:absolute;inset:12px;border:2px dashed var(--accent);border-radius:14px;background:rgba(76,194,255,.07);display:none;place-items:center;font-size:16px;color:var(--accent);pointer-events:none;z-index:8}
+body.dragging #drop{display:grid}
+#help{position:absolute;right:12px;bottom:10px;color:var(--faint);font-size:11px;pointer-events:none;text-shadow:0 1px 2px #000}
+#loading{position:absolute;inset:0;display:grid;place-content:center;justify-items:center;gap:12px;background:rgba(10,12,15,.62);z-index:9;color:var(--dim)}
+.spin{width:28px;height:28px;border:3px solid #2c333d;border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+#toast{position:absolute;left:50%;bottom:40px;transform:translate(-50%,8px);background:#20262e;border:1px solid var(--line-2);padding:8px 14px;border-radius:8px;max-width:min(560px,90%);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:10;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* uv panel */
+#uvPanel{position:absolute;left:12px;top:12px;width:380px;height:430px;min-width:260px;min-height:280px;max-width:calc(100% - 24px);max-height:calc(100% - 24px);resize:both;overflow:hidden;display:flex;flex-direction:column;background:rgba(16,19,23,.95);border:1px solid var(--line-2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.45);z-index:4}
+.uv-h{display:flex;align-items:center;gap:6px;padding:7px 8px;border-bottom:1px solid var(--line)}
+.uv-h b{font-size:11px;letter-spacing:.06em;color:var(--dim);margin-right:2px}
+.uv-h select{min-width:0;flex:1;background:#0f1216;border:1px solid var(--line-2);border-radius:5px;padding:3px 4px;font-size:11.5px}
+.uv-h select#uvBg{flex:0 0 96px}
+.icon-btn{background:none;border:0;color:var(--dim);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:4px}
+.icon-btn:hover{color:var(--text);background:var(--panel-2)}
+#uvCanvas{flex:1 1 0;min-height:0;width:100%;display:block;cursor:grab;touch-action:none}
+#uvCanvas:active{cursor:grabbing}
+.uv-f{display:flex;justify-content:space-between;gap:8px;padding:5px 9px 6px;font-size:10.5px;color:var(--faint);border-top:1px solid var(--line)}
+
+/* sidebar */
+#side{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;overflow-x:hidden}
+.brand{display:flex;align-items:center;gap:10px;padding:13px 14px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.brand h1{font-size:14px;margin:0;font-weight:650;letter-spacing:.2px}
+.brand #fileName{color:var(--dim);font-size:11.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{background:var(--panel-2);border:1px solid var(--line-2);border-radius:6px;padding:5px 11px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#06131b;font-weight:600;padding:7px 16px}
+.btn.primary:hover{filter:brightness(1.1);color:#06131b}
+.brand .btn{margin-left:auto}
+section{padding:12px 14px;border-bottom:1px solid var(--line)}
+h2{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px;font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+kbd{font:10px var(--mono);color:var(--faint);border:1px solid var(--line-2);border-radius:3px;padding:0 4px;letter-spacing:0;text-transform:none}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stats div{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:7px 8px;min-width:0}
+.stats b{display:block;font:600 13.5px var(--mono);color:#fff;overflow:hidden;text-overflow:ellipsis}
+.stats span{font-size:10.5px;color:var(--dim)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:10px 0 9px}
+.kv dt{color:var(--dim)}
+.kv dd{margin:0;text-align:right;font-family:var(--mono);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{font-size:10.5px;padding:2px 7px;border-radius:99px;border:1px solid var(--line-2);color:var(--faint)}
+.chip.on{color:var(--ok);border-color:rgba(95,211,141,.35);background:rgba(95,211,141,.07)}
+.chip.part{color:var(--warn);border-color:rgba(242,185,75,.35);background:rgba(242,185,75,.07)}
+.seg{display:flex;background:#0f1216;border:1px solid var(--line);border-radius:7px;padding:2px;gap:2px}
+.seg button{flex:1;color:var(--dim);background:transparent;border:0;border-radius:5px;padding:6px 4px;cursor:pointer}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--accent-bg);color:var(--accent)}
+.seg.sm button{padding:3px 8px;font-size:11.5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.grid2 button{color:var(--dim);background:var(--panel-2);border:1px solid var(--line);border-radius:5px;text-align:left;padding:6px 8px;cursor:pointer}
+.grid2 button:hover{color:var(--text)}
+.grid2 button.on{border-color:rgba(76,194,255,.5);background:var(--accent-bg);color:var(--accent)}
+.note{color:var(--dim);font-size:11px;margin:8px 0 0;min-height:1.4em}
+.tg{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;user-select:none}
+.tg kbd{margin-left:auto}
+.tg input{accent-color:var(--accent);margin:0}
+.sub{display:flex;align-items:center;gap:8px;padding:1px 0 5px 21px;color:var(--dim);font-size:11.5px}
+.sub input[type=range]{flex:1;accent-color:var(--accent);min-width:0}
+
+/* materials */
+.mat{border:1px solid var(--line);border-radius:7px;padding:8px;margin-top:8px;background:var(--panel-2)}
+.mat-h{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.sw{width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.2);flex:none}
+.mat-n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}
+.mat-h small{color:var(--faint);font-family:var(--mono)}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.slot{position:relative;cursor:pointer;min-width:0}
+.slot .th{aspect-ratio:1;border-radius:5px;border:1px dashed var(--line-2);overflow:hidden;display:grid;place-items:center;color:var(--faint);font-size:18px;
+  background:repeating-conic-gradient(#1f242c 0 25%,#181c22 0 50%) 0 0/12px 12px}
+.slot canvas{width:100%;height:100%;display:block}
+.slot.has .th{border-style:solid;border-color:var(--line-2)}
+.slot.miss .th{border-color:rgba(255,93,110,.7);color:var(--bad);font-size:10px}
+.slot:hover .th,.slot.over .th{border-color:var(--accent)}
+.slot.over .th{box-shadow:0 0 0 2px var(--accent-bg)}
+.slot .lb{font-size:10.5px;margin-top:3px}
+.slot .fn{font-size:10px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot.miss .fn{color:var(--bad)}
+.slot .x{position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:4px;border:0;background:rgba(0,0,0,.65);color:#fff;font-size:12px;line-height:17px;padding:0;cursor:pointer;display:none}
+.slot.has:hover .x{display:block}
+.miss-box{margin-top:10px;border:1px solid rgba(255,93,110,.35);background:rgba(255,93,110,.06);border-radius:7px;padding:8px 10px;font-size:11.5px}
+.miss-box b{color:var(--bad)}
+.miss-box ul{margin:5px 0;padding-left:16px;font-family:var(--mono);font-size:11px;word-break:break-all}
+.miss-box span{color:var(--dim)}
+
+/* meshes */
+.mrow{display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:5px}
+.mrow.sel{background:var(--accent-bg)}
+.mrow input{accent-color:var(--accent);margin:0}
+.mrow .mn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.mrow .mn:hover{color:var(--accent)}
+.mrow small{font-family:var(--mono);color:var(--faint)}
+
+@media (max-width:760px){
+  html,body{overflow:auto}
+  body{grid-template-columns:1fr;grid-template-rows:60vh auto}
+  #side{border-left:0;border-top:1px solid var(--line);overflow:visible}
+  #uvPanel{width:calc(100% - 24px);height:calc(100% - 24px)}
+}
+</style>
+<script>
+addEventListener('dragover', function (e) { e.preventDefault(); });
+addEventListener('drop', function (e) {
+  e.preventDefault();
+  if (!window.__viewerReady && e.dataTransfer) window.__earlyDrop = Array.from(e.dataTransfer.files || []);
+});
+</script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<main id="view">
+  <div id="empty"><div class="card">
+    <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4cc2ff" stroke-width="1.4" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v10" opacity=".6"/></svg>
+    <h3>Drop an FBX or OBJ here</h3>
+    <p>Add textures and the .mtl in the same drop — or drop the whole folder. Files never leave your browser.</p>
+    <button class="btn primary" id="browseBtn">Browse files</button>
+  </div></div>
+  <div id="drop">Drop to load</div>
+  <div id="uvPanel" hidden>
+    <div class="uv-h">
+      <b>UV</b>
+      <select id="uvMesh" title="Meshes to show"></select>
+      <select id="uvBg" title="Texture behind the UVs">
+        <option value="">No texture</option><option value="base">Base color</option><option value="normal">Normal</option><option value="rough">Roughness</option>
+      </select>
+      <button class="icon-btn" id="uvClose" title="Close (U)">×</button>
+    </div>
+    <canvas id="uvCanvas"></canvas>
+    <div class="uv-f"><span id="uvInfo"></span><span>wheel zoom · drag pan · dbl-click fit</span></div>
+  </div>
+  <div id="help">Drag orbit · Right/Middle-drag pan · Wheel zoom · F frame</div>
+  <div id="loading" hidden><div class="spin"></div><span id="loadingText">Loading…</span></div>
+  <div id="toast"></div>
+</main>
+
+<aside id="side">
+  <header class="brand">
+    <div><h1>3D Debug</h1><div id="fileName">No file loaded</div></div>
+    <button class="btn" id="openBtn">Open…</button>
+  </header>
+
+  <section>
+    <h2>Stats</h2>
+    <div class="stats">
+      <div title="Triangles after triangulation"><b id="stTris">–</b><span>Triangles</span></div>
+      <div title="Unique vertex positions — what a DCC app reports"><b id="stVerts">–</b><span>Vertices</span></div>
+      <div id="stSplitBox" title="Unique position + normal + UV + color — roughly what a game engine uploads"><b id="stSplit">–</b><span>Split verts</span></div>
+    </div>
+    <dl class="kv">
+      <dt>Meshes</dt><dd id="stMeshes">–</dd>
+      <dt>Materials</dt><dd id="stMats">–</dd>
+      <dt>Bounds</dt><dd id="stBounds" title="World-space size, file units">–</dd>
+    </dl>
+    <div class="chips" id="attrChips"></div>
+  </section>
+
+  <section>
+    <h2>Draw mode <kbd>1 2 3</kbd></h2>
+    <div class="seg" id="modeSeg">
+      <button data-v="wire">Wireframe</button><button data-v="unlit">Unlit</button><button data-v="shaded">Shaded</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>View</h2>
+    <div class="grid2" id="chanSeg">
+      <button data-v="material">Material</button>
+      <button data-v="base">Base color</button>
+      <button data-v="normal">Normal map</button>
+      <button data-v="rough">Roughness</button>
+      <button data-v="checker">UV checker</button>
+      <button data-v="uv">UV coords</button>
+      <button data-v="vcolor">Vertex colors</button>
+      <button data-v="normals">Normals</button>
+    </div>
+    <p class="note" id="chanNote"></p>
+  </section>
+
+  <section>
+    <h2>Overlays</h2>
+    <label class="tg"><input type="checkbox" data-k="wire"> Wireframe overlay <kbd>W</kbd></label>
+    <label class="tg"><input type="checkbox" data-k="normals"> Vertex normals <kbd>N</kbd></label>
+    <div class="sub" id="nLenRow" hidden><span>Length</span><input type="range" id="nLen" min="0.1" max="5" step="0.05" value="1"></div>
+    <label class="tg"><input type="checkbox" data-k="uvPanel"> UV layout <kbd>U</kbd></label>
+    <div class="sub" id="uvSetRow" hidden><span>UV set</span><div class="seg sm" id="uvSetSeg"></div></div>
+    <label class="tg"><input type="checkbox" data-k="back"> Backfaces in red <kbd>B</kbd></label>
+    <label class="tg"><input type="checkbox" data-k="grid"> Grid &amp; axes <kbd>G</kbd></label>
+    <label class="tg"><input type="checkbox" data-k="zUp"> Source is Z-up</label>
+    <label class="tg" title="Unreal / DirectX normal maps have green flipped vs OpenGL (Unity, Blender)"><input type="checkbox" data-k="flipY"> Normal map is DirectX (−Y)</label>
+  </section>
+
+  <section>
+    <h2>Materials &amp; textures</h2>
+    <p class="note" style="margin-top:0">Click or drop an image on a slot. Images dropped on the viewport are matched by name (…_basecolor / _normal / _roughness).</p>
+    <div id="matList"></div>
+    <div id="missing"></div>
+  </section>
+
+  <section>
+    <h2>Meshes</h2>
+    <div id="meshList"><p class="note" style="margin:0">—</p></div>
+  </section>
+</aside>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { TGALoader } from 'three/addons/loaders/TGALoader.js';
+import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = s => document.querySelector(s);
+const IMG_RE = /\.(png|jpe?g|webp|bmp|gif|tga)$/i;
+const MODEL_RE = /\.(fbx|obj)$/i;
+const SLOT_KEYS = ['base', 'normal', 'rough'];
+const SLOT_NAMES = { base: 'Base', normal: 'Normal', rough: 'Rough' };
+const UV_NAMES = { uv: 'UV0', uv1: 'UV1', uv2: 'UV2', uv3: 'UV3' };
+const UV_CH = { uv: 0, uv1: 1, uv2: 2, uv3: 3 };
+const MISSING = '\u0000missing:';
+const fmt = n => n.toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const baseName = p => { try { p = decodeURIComponent(p); } catch {} return p.split(/[\\/]/).pop().toLowerCase(); };
+const PLACEHOLDER = await new Promise(r => { const c = document.createElement('canvas'); c.width = c.height = 2; c.toBlob(r, 'image/png'); });
+
+// ---------------------------------------------------------------- state
+const state = { mode: 'shaded', channel: 'material', wire: false, normals: false, nLen: 1, uvPanel: false, uvSet: 'uv', back: false, grid: true, zUp: false, flipY: false };
+let model = null;      // { root, name, meshes, entries, missing, blobs, origMats, box, diag, genNormals }
+let busy = false;
+
+// ---------------------------------------------------------------- drag & drop
+// Registered first, so nothing that runs later can stop drops from working.
+let dragDepth = 0;
+function endDrag() { dragDepth = 0; document.body.classList.remove('dragging'); }
+const looksLikeFiles = e => {
+  const t = Array.from(e.dataTransfer?.types || []);
+  return !t.length || t.includes('Files') || t.includes('application/x-moz-file') || t.includes('text/uri-list');
+};
+addEventListener('dragenter', e => {
+  e.preventDefault();
+  if (looksLikeFiles(e)) { dragDepth++; document.body.classList.add('dragging'); }
+});
+addEventListener('dragleave', () => { if (--dragDepth <= 0) endDrag(); });
+// Always accept: browsers only fire "drop" if every dragover was cancelled, and some
+// drag sources don't label the data as "Files" until the drop itself.
+addEventListener('dragover', e => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'; });
+addEventListener('drop', e => {
+  e.preventDefault();
+  endDrag();
+  const dt = e.dataTransfer;
+  if (!dt) return;
+  // read everything now — the browser empties the DataTransfer once this handler returns
+  const plain = Array.from(dt.files || []);
+  const entries = Array.from(dt.items || []).filter(i => i.kind === 'file').map(i => {
+    try { return i.webkitGetAsEntry?.() || null; } catch { return null; }
+  });
+  collectDropped(plain, entries)
+    .then(files => files.length ? handleFiles(files) : toast('Nothing to load in that drop — drag files from your file manager.'))
+    .catch(err => { console.error(err); toast(`Drop failed: ${err.message || err}`); });
+});
+async function collectDropped(plain, entries) {
+  // Plain file drops: use the FileList directly (works in every browser).
+  if (!entries.some(en => en?.isDirectory)) return plain.filter(f => f.size > 0 || /\.\w+$/.test(f.name));
+  // Folder drops: walk them with the entry API.
+  const out = [];
+  const walk = async (entry, depth) => {
+    if (entry.isFile) {
+      out.push(plain.find(f => f.name === entry.name && f.size > 0) || await new Promise((res, rej) => entry.file(res, rej)));
+    } else if (entry.isDirectory && depth < 8) {
+      const reader = entry.createReader();
+      for (;;) {
+        const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        if (!batch.length) break;
+        for (const c of batch) await walk(c, depth + 1).catch(err => console.warn('Skipped', c.name, err));
+      }
+    }
+  };
+  for (const en of entries) if (en) await walk(en, 0).catch(err => console.warn('Skipped', en.name, err));
+  return out;
+}
+
+// ---------------------------------------------------------------- renderer / scene
+const view = $('#view');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.domElement.className = 'gl';
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.autoClear = false;
+renderer.toneMapping = THREE.NeutralToneMapping;
+view.prepend(renderer.domElement);
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.01, 1000);
+camera.position.set(6, 4, 8);
+scene.add(camera);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.75;
+const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+keyLight.position.set(0.6, 1, 0.5);
+keyLight.target.position.set(0, 0, -1);
+camera.add(keyLight, keyLight.target);
+const helpers = new THREE.Group();
+scene.add(helpers);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.15;
+controls.zoomToCursor = true;
+controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN };
+
+let needsRender = true;
+const requestRender = () => { needsRender = true; };
+controls.addEventListener('change', requestRender);
+
+const overlayMat = new THREE.MeshBasicMaterial({ color: 0x07090c, wireframe: true, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+
+renderer.setAnimationLoop(() => {
+  const moved = controls.update();
+  if (!moved && !needsRender) return;
+  needsRender = false;
+  // keep the depth range proportional to the orbit distance
+  const d = camera.position.distanceTo(controls.target) || 1;
+  camera.near = d / 300;
+  camera.far = d * 30 + (model ? model.diag * 4 : 100);
+  camera.updateProjectionMatrix();
+  renderer.clear();
+  camera.layers.enableAll();
+  renderer.render(scene, camera);
+  if (state.wire && state.mode !== 'wire' && model) {
+    camera.layers.set(0);            // model only — helpers live on layer 1
+    scene.overrideMaterial = overlayMat;
+    renderer.render(scene, camera);
+    scene.overrideMaterial = null;
+    camera.layers.enableAll();
+  }
+});
+
+new ResizeObserver(() => {
+  const w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  requestRender();
+}).observe(view);
+
+// ---------------------------------------------------------------- debug textures
+const checkerTex = (() => {
+  const N = 8, S = 1024, cs = S / N, c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d');
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${cs * 0.3}px system-ui, sans-serif`;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const odd = (x + y) % 2;
+    g.fillStyle = `hsl(${(x / N) * 330} 55% ${odd ? 64 : 36}%)`;
+    g.fillRect(x * cs, y * cs, cs, cs);
+    g.fillStyle = odd ? 'rgba(0,0,0,.78)' : 'rgba(255,255,255,.92)';
+    g.fillText(String.fromCharCode(65 + x) + (N - y), x * cs + cs / 2, y * cs + cs / 2);   // A1 = bottom-left (u0,v0)
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = maxAniso;
+  return t;
+})();
+const uvGradTex = (() => {
+  const N = 256, d = new Uint8Array(N * N * 4);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = (y * N + x) * 4;
+    d[i] = Math.round(x * 255 / (N - 1)); d[i + 1] = Math.round(y * 255 / (N - 1)); d[i + 2] = 0; d[i + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, N, N);
+  t.colorSpace = THREE.SRGBColorSpace;      // so the displayed value equals the raw u / v
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+})();
+
+// normal / roughness maps are linear data; to *look at* them we show the texels as-is
+const dispCache = new WeakMap();
+function displayTex(t) {
+  let d = dispCache.get(t);
+  if (!d) { d = t.clone(); d.colorSpace = THREE.SRGBColorSpace; d.needsUpdate = true; dispCache.set(t, d); }
+  return d;
+}
+// texture → something drawable on a 2D canvas
+const srcCache = new WeakMap();
+function texSource(tex) {
+  const img = tex?.image;
+  if (!img) return null;
+  if (!img.data) return img.width ? img : null;            // HTMLImageElement / ImageBitmap / canvas
+  if (srcCache.has(tex)) return srcCache.get(tex);
+  let c = null;
+  if (img.data.length === img.width * img.height * 4) {    // DataTexture (TGA)
+    c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d'), id = g.createImageData(img.width, img.height);
+    id.data.set(img.data); g.putImageData(id, 0, 0);
+    if (!tex.flipY) { const f = document.createElement('canvas'); f.width = c.width; f.height = c.height; const fg = f.getContext('2d'); fg.scale(1, -1); fg.drawImage(c, 0, -c.height); c = f; }
+  }
+  srcCache.set(tex, c);
+  return c;
+}
+const hasImage = t => !!t?.image && (t.image.data ? !!t.image.data : t.image.width > 0);
+
+// ---------------------------------------------------------------- materials
+function patchShader(m, worldNormals, backfaces) {
+  if (!worldNormals && !backfaces) return;
+  m.onBeforeCompile = sh => {
+    if (worldNormals) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>',
+      '#include <normal_fragment_maps>\n\tnormal = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );');
+    if (backfaces) sh.fragmentShader = sh.fragmentShader.replace(/}\s*$/,
+      '\tif ( ! gl_FrontFacing ) gl_FragColor = vec4( 0.95, 0.12, 0.2, 1.0 );\n}');
+  };
+  m.customProgramCacheKey = () => `dbg${+worldNormals}${+backfaces}`;
+}
+
+function buildMat(e, hasColor) {
+  const { mode, channel: ch } = state;
+  const lit = mode === 'shaded';
+  const { base: { tex: base }, normal: { tex: nrm }, rough: { tex: rgh } } = e.slots;
+  const B = p => new THREE.MeshBasicMaterial({ toneMapped: false, ...p });
+  const L = p => new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.6, ...p });
+  let m;
+  switch (ch) {
+    case 'material':
+      if (mode === 'wire') m = B({ color: 0xb9c6d8 });
+      else if (!lit) m = B({ color: e.color, map: base });
+      else m = L({ color: e.color, map: base, normalMap: nrm, roughnessMap: rgh, roughness: rgh ? 1 : e.roughness });
+      if (mode !== 'wire') { m.transparent = e.transparent; m.opacity = e.opacity; m.alphaTest = e.alphaTest; }
+      break;
+    case 'base': {
+      const p = { map: base, color: base ? 0xffffff : e.color };
+      m = lit ? L(p) : B(p); break;
+    }
+    case 'normal':
+      m = lit ? L({ color: 0xb4b4b4, normalMap: nrm, roughness: 0.45 })
+              : B(nrm ? { map: displayTex(nrm) } : { color: 0x8080ff });
+      break;
+    case 'rough':
+      m = lit ? L({ color: 0xb8b8b8, metalness: 1, roughnessMap: rgh, roughness: rgh ? 1 : e.roughness })
+              : B(rgh ? { map: displayTex(rgh) } : { color: new THREE.Color().setRGB(e.roughness, e.roughness, e.roughness, THREE.SRGBColorSpace) });
+      break;
+    case 'checker': m = lit ? L({ map: checkerTex, roughness: 0.7 }) : B({ map: checkerTex }); break;
+    case 'uv': m = B({ map: uvGradTex }); break;
+    case 'vcolor': m = !hasColor ? B({ color: 0x3a3f48 }) : lit ? L({ vertexColors: true, roughness: 0.7 }) : B({ vertexColors: true }); break;
+    case 'normals': m = new THREE.MeshNormalMaterial(); break;
+  }
+  if (mode === 'wire') m.wireframe = true;
+  m.side = state.back ? THREE.DoubleSide : THREE.FrontSide;
+  m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
+  if (m.normalScale) m.normalScale.set(1, state.flipY ? -1 : 1);
+  patchShader(m, ch === 'normals', state.back);
+  return m;
+}
+
+const matCache = new Map();
+function applyMaterials() {
+  if (!model) return;
+  for (const m of matCache.values()) m.dispose();
+  matCache.clear();
+  checkerTex.channel = uvGradTex.channel = UV_CH[state.uvSet] ?? 0;
+  for (const mesh of model.meshes) {
+    const hasColor = !!mesh.geometry.attributes.color;
+    const mats = mesh.userData.entries.map(e => {
+      const key = e.id + (hasColor ? 'c' : '');
+      if (!matCache.has(key)) matCache.set(key, buildMat(e, hasColor));
+      return matCache.get(key);
+    });
+    mesh.material = mesh.userData.multi ? mats : mats[0];
+  }
+  requestRender();
+}
+
+// ---------------------------------------------------------------- stats
+const _h = new Int32Array(12);
+function hashN(n) {   // 53-bit hash of _h[0..n) — collisions are astronomically rare at mesh sizes
+  let a = 0x811c9dc5 | 0, b = 0x9747b28c | 0;
+  for (let i = 0; i < n; i++) { const v = _h[i]; a = Math.imul(a ^ v, 16777619); b = Math.imul(b ^ v, 0x5bd1e995); b ^= b >>> 13; }
+  return (a >>> 0) * 2097152 + ((b >>> 0) & 2097151);
+}
+function meshStats(g) {
+  const pos = g.attributes.position, nor = g.attributes.normal, uv = g.attributes.uv, col = g.attributes.color;
+  if (!g.boundingBox) g.computeBoundingBox();
+  const k = 1e6 / (g.boundingBox.getSize(new THREE.Vector3()).length() || 1);
+  const n = pos.count, P = new Set(), S = new Set(), R = Math.round;
+  for (let i = 0; i < n; i++) {
+    _h[0] = R(pos.getX(i) * k); _h[1] = R(pos.getY(i) * k); _h[2] = R(pos.getZ(i) * k);
+    P.add(hashN(3));
+    let c = 3;
+    if (nor) { _h[c++] = R(nor.getX(i) * 1e4); _h[c++] = R(nor.getY(i) * 1e4); _h[c++] = R(nor.getZ(i) * 1e4); }
+    if (uv) { _h[c++] = R(uv.getX(i) * 1e5); _h[c++] = R(uv.getY(i) * 1e5); }
+    if (col) { _h[c++] = R(col.getX(i) * 1e3); _h[c++] = R(col.getY(i) * 1e3); _h[c++] = R(col.getZ(i) * 1e3); }
+    S.add(hashN(c));
+  }
+  return { tris: Math.floor((g.index ? g.index.count : n) / 3), verts: P.size, split: S.size, buffer: n };
+}
+
+// ---------------------------------------------------------------- loading
+const openInput = Object.assign(document.createElement('input'), { type: 'file', multiple: true, accept: '.fbx,.obj,.mtl,.png,.jpg,.jpeg,.tga,.webp,.bmp,.gif' });
+openInput.onchange = () => { const f = Array.from(openInput.files); openInput.value = ''; handleFiles(f); };
+$('#openBtn').onclick = $('#browseBtn').onclick = () => openInput.click();
+
+async function handleFiles(files) {
+  if (!files.length) return;
+  if (busy) return toast('Still loading — one moment.');
+  const models = files.filter(f => MODEL_RE.test(f.name));
+  if (models.length) {
+    if (models.length > 1) toast(`Loading ${models[0].name} — one model at a time.`);
+    return loadModel(models[0], files);
+  }
+  const imgs = files.filter(f => IMG_RE.test(f.name));
+  if (imgs.length) {
+    if (!model) return toast('Load an FBX or OBJ first, then drop textures.');
+    const { done, skipped } = await assignImages(imgs, false);
+    const parts = [];
+    if (done.length) parts.push(`Assigned ${done.join(', ')}`);
+    if (skipped.length) parts.push(`Couldn't tell the type of ${skipped.join(', ')} — drop it on a slot`);
+    return toast(parts.join('. ') || 'Nothing assigned.');
+  }
+  toast('Unsupported file. Drop .fbx or .obj (plus textures / .mtl).');
+}
+
+async function loadModel(file, files) {
+  busy = true;
+  setLoading(`Loading ${file.name}…`);
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  clearModel();
+  const blobs = [], fileMap = new Map(), srcName = new Map(), missing = new Set();
+  for (const f of files) {
+    if (MODEL_RE.test(f.name)) continue;
+    const u = URL.createObjectURL(f);
+    blobs.push(u); fileMap.set(f.name.toLowerCase(), u); srcName.set(u, f.name);
+  }
+  // Resolve every texture the file references by bare file name against the dropped files.
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier(url => {
+    if (/^(blob|data):/i.test(url)) return url;
+    const b = baseName(url);
+    if (fileMap.has(b)) return fileMap.get(b);
+    missing.add(b);
+    const u = URL.createObjectURL(PLACEHOLDER);
+    blobs.push(u); srcName.set(u, MISSING + b);
+    return u;
+  });
+  manager.addHandler(/\.tga$/i, new TGALoader(manager));
+  let pending = 0, idle = null;
+  const _s = manager.itemStart, _e = manager.itemEnd;
+  manager.itemStart = u => { pending++; _s(u); };
+  manager.itemEnd = u => { _e(u); if (--pending <= 0 && idle) { idle(); idle = null; } };
+  try {
+    const buf = await file.arrayBuffer();
+    let root;
+    if (/\.fbx$/i.test(file.name)) {
+      root = new FBXLoader(manager).parse(buf, '');
+    } else {
+      const text = new TextDecoder().decode(buf);
+      const loader = new OBJLoader(manager);
+      for (const m of text.matchAll(/^mtllib\s+(.+?)\s*$/gm)) {
+        const f = files.find(x => x.name.toLowerCase() === baseName(m[1]));
+        if (!f) { missing.add(baseName(m[1])); continue; }
+        const mc = new MTLLoader(manager).parse(await f.text(), '');
+        mc.preload();
+        loader.setMaterials(mc);
+      }
+      root = loader.parse(text);
+    }
+    setLoading('Loading textures…');
+    await new Promise(r => { if (pending <= 0) r(); else { idle = r; setTimeout(r, 30000); } });
+    setLoading('Counting vertices…');
+    await new Promise(r => requestAnimationFrame(r));
+    const m = buildModel(root, file.name, missing, srcName, blobs);
+    if (!m.meshes.length) throw new Error('No meshes found in this file.');
+    model = m;
+    scene.add(root);
+    root.rotation.x = state.zUp ? -Math.PI / 2 : 0;
+    updateBounds();
+    // dropped images the file didn't reference → assign by name to empty slots
+    const used = new Set(m.entries.flatMap(e => SLOT_KEYS.map(k => e.slots[k].file)).filter(Boolean));
+    const extra = files.filter(f => IMG_RE.test(f.name) && !used.has(f.name.toLowerCase()));
+    if (extra.length) await assignImages(extra, true);
+    $('#empty').hidden = true;
+    $('#fileName').textContent = file.name;
+    $('#fileName').title = file.name;
+    buildUVOptions();
+    renderAll();
+    frame(root, true);
+    fitUV();
+    toast(`Loaded ${file.name}` + (missing.size ? ` · ${missing.size} referenced file(s) missing` : ''));
+  } catch (err) {
+    console.error(err);
+    for (const u of blobs) URL.revokeObjectURL(u);
+    model = null;
+    renderAll();
+    $('#empty').hidden = false;
+    $('#fileName').textContent = 'No file loaded';
+    toast(`Couldn't load ${file.name}: ${err.message || err}`);
+  } finally {
+    setLoading(null);
+    busy = false;
+  }
+}
+
+function buildModel(root, name, missing, srcName, blobs) {
+  const m = { root, name, missing, srcName, blobs, meshes: [], entries: [], origMats: [], genNormals: 0 };
+  const byKey = new Map();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const g = o.geometry;
+    if (!g.attributes.position) return;
+    if (!g.attributes.normal) { g.computeVertexNormals(); o.userData.genNormals = true; m.genNormals++; }
+    if (o.isSkinnedMesh) o.frustumCulled = false;
+    o.userData.multi = Array.isArray(o.material);
+    const list = o.userData.multi ? o.material : [o.material];
+    o.userData.entries = list.map(mat => {
+      const key = mat.name ? `n:${mat.name}:${mat.map?.uuid || ''}` : mat.map ? mat.uuid : 'default';
+      let e = byKey.get(key);
+      if (!e) { e = makeEntry(mat, m.entries.length, srcName); byKey.set(key, e); m.entries.push(e); m.origMats.push(mat); }
+      if (!e.meshes.includes(o)) e.meshes.push(o);
+      return e;
+    });
+    o.userData.label = o.name || o.parent?.name || `Mesh ${m.meshes.length + 1}`;
+    o.userData.stats = meshStats(g);
+    m.meshes.push(o);
+  });
+  return m;
+}
+
+function slotFrom(tex, srcName) {
+  if (!tex) return { tex: null };
+  const n = tex.image?.src ? srcName.get(tex.image.src) : undefined;
+  if (n?.startsWith(MISSING)) return { tex: null, missing: n.slice(MISSING.length) };
+  if (!hasImage(tex)) return { tex: null, missing: tex.name || 'unreadable texture' };
+  tex.anisotropy = maxAniso;
+  return { tex, label: n || tex.name || 'embedded', file: n?.toLowerCase() };
+}
+function makeEntry(mat, i, srcName) {
+  // normal maps often arrive in the bump slot (Blender OBJ map_Bump, Max/Maya FBX "Bump")
+  const texName = t => (t?.image?.src && srcName.get(t.image.src)?.replace(MISSING, '')) || t?.name || '';
+  const nrm = mat.normalMap || (mat.bumpMap && classify(texName(mat.bumpMap)) === 'normal' ? mat.bumpMap : null);
+  return {
+    id: i,
+    name: mat.name || (i ? `Material ${i + 1}` : 'Default'),
+    color: mat.color ? mat.color.clone() : new THREE.Color(1, 1, 1),
+    opacity: mat.opacity ?? 1, transparent: !!mat.transparent, alphaTest: mat.alphaTest || 0,
+    roughness: mat.roughness ?? 0.6,
+    slots: { base: slotFrom(mat.map, srcName), normal: slotFrom(nrm, srcName), rough: slotFrom(mat.roughnessMap, srcName) },
+    meshes: [],
+  };
+}
+
+function clearModel() {
+  if (!model) return;
+  for (const mesh of model.meshes) {
+    const h = mesh.userData.nh;
+    if (h) { helpers.remove(h); h.geometry.dispose(); h.material.dispose(); }
+    mesh.geometry.dispose();
+  }
+  scene.remove(model.root);
+  for (const m of matCache.values()) m.dispose();
+  matCache.clear();
+  const texs = new Set();
+  for (const mat of model.origMats) for (const v of Object.values(mat)) if (v?.isTexture) texs.add(v);
+  for (const e of model.entries) for (const k of SLOT_KEYS) if (e.slots[k].tex) texs.add(e.slots[k].tex);
+  for (const t of texs) { t.dispose(); dispCache.get(t)?.dispose(); }
+  for (const mat of model.origMats) mat.dispose();
+  for (const u of model.blobs) URL.revokeObjectURL(u);
+  for (const g of uvCache.values()) g?.dispose();
+  uvCache.clear();
+  uvGroup.clear();
+  model = null;
+}
+
+// ---------------------------------------------------------------- texture assignment
+function classify(fname) {
+  const n = fname.toLowerCase().replace(/\.[^.]+$/, '');
+  const t = n.split(/[^a-z0-9]+/);
+  const has = (...w) => w.some(x => t.includes(x));
+  const inc = (...w) => w.some(x => n.includes(x));
+  if (inc('normal') || has('n', 'nrm', 'nor', 'norm', 'nml', 'nm')) return 'normal';
+  if (inc('rough') || has('r', 'rgh')) return 'rough';
+  if (inc('basecolor', 'base_color', 'albedo', 'diffuse') || has('d', 'diff', 'col', 'color', 'colour', 'base', 'bc', 'alb')) return 'base';
+  if (inc('metal', 'occlusion', 'height', 'displace', 'emiss', 'opacity', 'gloss', 'smooth', 'specular', 'mask', 'bump', 'cavity', 'curvature')
+      || has('ao', 'orm', 'arm', 'mra', 'mrao', 'spec', 'e', 'm', 'h', 'a', 'o', 'alpha', 'disp', 'ms')) return null;
+  return 'base';
+}
+const normName = s => s.toLowerCase().replace(/\.[^.]+$/, '').replace(/^(m|mat|mi|mtl|material|t|tex|texture)[_\-\s]/, '').replace(/[^a-z0-9]/g, '');
+function matchEntries(fname) {
+  const n = normName(fname);
+  const hits = model.entries.map(e => [e, normName(e.name)]).filter(([, m]) => m.length >= 3 && n.includes(m));
+  if (!hits.length) return model.entries;
+  const best = Math.max(...hits.map(([, m]) => m.length));
+  return hits.filter(([, m]) => m.length === best).map(([e]) => e);
+}
+
+function loadImageTex(file, kind) {
+  const url = URL.createObjectURL(file);
+  model.blobs.push(url);
+  const loader = /\.tga$/i.test(file.name) ? new TGALoader() : new THREE.TextureLoader();
+  return new Promise(res => loader.load(url, t => {
+    t.name = file.name;
+    t.colorSpace = kind === 'base' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = maxAniso;
+    t.needsUpdate = true;
+    res(t);
+  }, undefined, () => { toast(`Couldn't read ${file.name}`); res(null); }));
+}
+
+async function assignImages(files, onlyEmpty) {
+  const done = [], skipped = [];
+  for (const f of files) {
+    const name = f.name.toLowerCase();
+    // 1) exact match with a texture the model references but was missing
+    let targets = [];
+    for (const e of model.entries) for (const k of SLOT_KEYS) if (e.slots[k].missing === name) targets.push([e, k]);
+    // 2) otherwise guess the slot from the file name, and the material from the name prefix
+    if (!targets.length) {
+      const kind = classify(f.name);
+      if (!kind) { skipped.push(f.name); continue; }
+      targets = matchEntries(f.name).filter(e => !onlyEmpty || !e.slots[kind].tex).map(e => [e, kind]);
+    }
+    if (!targets.length) continue;
+    const byKind = {};
+    for (const [e, k] of targets) {
+      if (!(k in byKind)) byKind[k] = await loadImageTex(f, k);
+      if (byKind[k]) e.slots[k] = { tex: byKind[k], label: f.name, file: name };
+    }
+    model.missing.delete(name);
+    done.push(f.name);
+  }
+  refreshTextures();
+  return { done, skipped };
+}
+
+async function setSlotFile(e, k, f) {
+  if (!IMG_RE.test(f.name)) return toast('Use an image file (png, jpg, tga, webp).');
+  const tex = await loadImageTex(f, k);
+  if (!tex) return;
+  e.slots[k] = { tex, label: f.name, file: f.name.toLowerCase() };
+  model.missing.delete(f.name.toLowerCase());
+  refreshTextures();
+}
+function refreshTextures() {
+  if (!uvBgTouched && !$('#uvBg').value && model.entries.some(e => e.slots.base.tex)) $('#uvBg').value = 'base';
+  renderMaterials(); applyMaterials(); updateNote(); scheduleUV();
+}
+
+// ---------------------------------------------------------------- framing / helpers
+function updateBounds() {
+  model.root.updateMatrixWorld(true);
+  model.box = new THREE.Box3().setFromObject(model.root);
+  model.diag = model.box.getSize(new THREE.Vector3()).length() || 1;
+}
+function frame(obj = model?.root, resetDir = false) {
+  if (!obj) return;
+  const box = new THREE.Box3().setFromObject(obj);
+  if (box.isEmpty()) return;
+  const size = box.getSize(new THREE.Vector3()).length() || 1, c = box.getCenter(new THREE.Vector3());
+  const fit = Math.min(camera.aspect, 1);
+  const dist = size / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / fit * 1.12;
+  const dir = resetDir ? new THREE.Vector3(1, 0.65, 1.35) : camera.position.clone().sub(controls.target);
+  if (dir.lengthSq() < 1e-12) dir.set(1, 0.65, 1.35);
+  controls.target.copy(c);
+  camera.position.copy(c).addScaledVector(dir.normalize(), dist);
+  controls.update();
+  requestRender();
+}
+
+let grid = null, axes = null;
+function gridSize(d) { const t = d * 1.6, p = 10 ** Math.floor(Math.log10(t)), r = t / p; return (r <= 2 ? 2 : r <= 5 ? 5 : 10) * p; }
+function updateGrid() {
+  for (const o of [grid, axes]) if (o) { helpers.remove(o); o.geometry.dispose(); o.material.dispose(); }
+  grid = axes = null;
+  if (state.grid) {
+    const size = model ? gridSize(model.diag) : 10, step = size / 20;
+    grid = new THREE.GridHelper(size, 20, 0x4a5462, 0x2b313a);
+    if (model) {
+      const c = model.box.getCenter(new THREE.Vector3());
+      grid.position.set(Math.round(c.x / step) * step, model.box.min.y, Math.round(c.z / step) * step);
+    }
+    axes = new THREE.AxesHelper(size * 0.08);
+    for (const o of [grid, axes]) { o.layers.set(1); o.material.toneMapped = false; helpers.add(o); }
+  }
+  requestRender();
+}
+
+function updateNormalHelpers() {
+  if (!model) return;
+  for (const m of model.meshes) {
+    const h = m.userData.nh;
+    if (h) { helpers.remove(h); h.geometry.dispose(); h.material.dispose(); delete m.userData.nh; }
+  }
+  if (state.normals) {
+    const size = model.diag * 0.008 * state.nLen;
+    for (const m of model.meshes) {
+      const h = new VertexNormalsHelper(m, size, 0xffd23f);
+      h.visible = m.visible; h.layers.set(1); h.material.toneMapped = false;
+      helpers.add(h); m.userData.nh = h;
+    }
+  }
+  requestRender();
+}
+let nLenQueued = false;
+$('#nLen').addEventListener('input', ev => {
+  state.nLen = +ev.target.value;
+  if (nLenQueued) return;
+  nLenQueued = true;
+  requestAnimationFrame(() => {
+    nLenQueued = false;
+    if (!model) return;
+    const size = model.diag * 0.008 * state.nLen;
+    for (const m of model.meshes) { const h = m.userData.nh; if (h) { h.size = size; h.update(); } }
+    requestRender();
+  });
+});
+
+function applyUp() {
+  if (!model) return;
+  model.root.rotation.x = state.zUp ? -Math.PI / 2 : 0;
+  updateBounds();
+  for (const m of model.meshes) m.userData.nh?.update();
+  updateGrid();
+  renderStats();
+  frame(model.root);
+}
+
+// ---------------------------------------------------------------- UI: state & controls
+const segs = { '#modeSeg': 'mode', '#chanSeg': 'channel', '#uvSetSeg': 'uvSet' };
+for (const [sel, key] of Object.entries(segs)) {
+  $(sel).addEventListener('click', ev => { const b = ev.target.closest('button[data-v]'); if (b) setState(key, b.dataset.v); });
+}
+document.querySelectorAll('input[data-k]').forEach(cb => cb.addEventListener('change', () => setState(cb.dataset.k, cb.checked)));
+
+function syncUI() {
+  for (const [sel, key] of Object.entries(segs)) $(sel).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === state[key]));
+  document.querySelectorAll('input[data-k]').forEach(cb => { cb.checked = !!state[cb.dataset.k]; });
+  $('#nLenRow').hidden = !state.normals;
+  $('#uvSetRow').hidden = $('#uvSetSeg').children.length < 2;
+  $('#uvPanel').hidden = !state.uvPanel;
+}
+
+function setState(key, val) {
+  if (state[key] === val) return;
+  state[key] = val;
+  syncUI();
+  switch (key) {
+    case 'mode': case 'channel': case 'back': case 'flipY': applyMaterials(); break;
+    case 'uvSet': applyMaterials(); fitUV(); break;
+    case 'wire': requestRender(); break;
+    case 'normals': updateNormalHelpers(); break;
+    case 'uvPanel': if (val) { fitUV(); } break;
+    case 'grid': updateGrid(); break;
+    case 'zUp': applyUp(); break;
+  }
+  updateNote();
+}
+
+addEventListener('keydown', ev => {
+  if (ev.target.matches('select, textarea, input:not([type=checkbox])') || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  const k = ev.key.toLowerCase();
+  const modes = { 1: 'wire', 2: 'unlit', 3: 'shaded' };
+  if (modes[k]) return setState('mode', modes[k]);
+  const tog = { w: 'wire', n: 'normals', u: 'uvPanel', b: 'back', g: 'grid' }[k];
+  if (tog) return setState(tog, !state[tog]);
+  if (k === 'f') frame();
+});
+
+function updateNote() {
+  let t = '';
+  if (model) {
+    const ms = model.meshes, ch = state.channel, uvn = UV_NAMES[state.uvSet], lit = state.mode === 'shaded';
+    const lacking = a => ms.filter(m => !m.geometry.attributes[a]).length;
+    const anySlot = k => model.entries.some(e => e.slots[k].tex);
+    if (ch === 'material') t = lit ? 'Base × color, normal and roughness maps, lit (PBR, metalness 0).' : state.mode === 'unlit' ? 'Base color × material color, no lighting.' : 'Plain wireframe. Pick another view to color the lines.';
+    else if (ch === 'base') t = anySlot('base') ? 'Base color texture only.' : 'No base color texture — showing material color.';
+    else if (ch === 'normal') t = !anySlot('normal') ? 'No normal map assigned.' : lit ? 'Grey clay + normal map. Unlit (2) shows the raw texture.' : 'Raw normal map texels. Shaded (3) shows it lit on grey clay.';
+    else if (ch === 'rough') t = !anySlot('rough') ? 'No roughness map assigned — drop one on a slot below.' : lit ? 'Chrome + roughness map: blurry = rough, sharp = smooth.' : 'Raw roughness texels (white = rough).';
+    else if (ch === 'checker' || ch === 'uv') {
+      const n = lacking(state.uvSet);
+      t = ch === 'uv' ? `Red = U, Green = V on ${uvn} (wraps every 1.0). Always unlit.` : `A1 = bottom-left of ${uvn}. Mirrored letters = mirrored UVs.`;
+      if (n) t += ` ${n} mesh(es) have no ${uvn}.`;
+    }
+    else if (ch === 'vcolor') { const n = lacking('color'); t = n === ms.length ? 'This file has no vertex colors.' : n ? `${n} of ${ms.length} meshes have no vertex colors (dark grey).` : 'Raw vertex colors (RGB).'; }
+    else if (ch === 'normals') t = 'World-space normals: R = +X, G = +Y, B = +Z. Always unlit.' + (model.genNormals ? ` ${model.genNormals} mesh(es) had none — generated flat.` : '');
+  }
+  $('#chanNote').textContent = t;
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3800);
+}
+function setLoading(text) { $('#loading').hidden = !text; if (text) $('#loadingText').textContent = text; }
+
+// ---------------------------------------------------------------- UI: panels
+function renderAll() { renderStats(); renderMaterials(); renderMeshes(); applyMaterials(); updateGrid(); updateNormalHelpers(); updateNote(); syncUI(); scheduleUV(); }
+
+function renderStats() {
+  const set = (id, v) => { $(id).textContent = v; };
+  if (!model) { ['#stTris', '#stVerts', '#stSplit', '#stMeshes', '#stMats', '#stBounds'].forEach(id => set(id, '–')); $('#attrChips').textContent = ''; return; }
+  const vis = model.meshes.filter(m => m.visible);
+  const sum = k => vis.reduce((a, m) => a + m.userData.stats[k], 0);
+  set('#stTris', fmt(sum('tris')));
+  set('#stVerts', fmt(sum('verts')));
+  set('#stSplit', fmt(sum('split')));
+  $('#stSplitBox').title = `Unique position + normal + UV + color — roughly what a game engine uploads.\nRaw buffer vertices: ${fmt(sum('buffer'))}`;
+  set('#stMeshes', vis.length === model.meshes.length ? fmt(vis.length) : `${vis.length} of ${model.meshes.length} visible`);
+  set('#stMats', fmt(model.entries.length));
+  const s = model.box.getSize(new THREE.Vector3()), p = v => +v.toPrecision(4);
+  set('#stBounds', `${p(s.x)} × ${p(s.y)} × ${p(s.z)}`);
+  const total = vis.length, cnt = a => vis.filter(m => m.geometry.attributes[a]).length;
+  const chip = (label, n, extra = '') => `<span class="chip ${total && n === total ? 'on' : n ? 'part' : 'off'}" title="${n} of ${total} meshes${extra}">${label}${n && n < total ? ` ${n}/${total}` : ''}</span>`;
+  const gen = vis.filter(m => m.userData.genNormals).length;
+  const html = [chip('Normals', total - gen, gen ? ` · generated for ${gen}` : '')];
+  for (const a of ['uv', 'uv1', 'uv2', 'uv3']) if (a === 'uv' || a === 'uv1' || cnt(a)) html.push(chip(UV_NAMES[a], cnt(a)));
+  html.push(chip('Vertex colors', cnt('color')), chip('Skinned', vis.filter(m => m.isSkinnedMesh).length));
+  $('#attrChips').innerHTML = html.join('');
+}
+
+const slotInput = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,.tga' });
+let slotCb = null;
+slotInput.onchange = () => { const f = slotInput.files[0]; slotInput.value = ''; if (f && slotCb) slotCb(f); };
+
+function renderMaterials() {
+  const list = $('#matList');
+  list.textContent = '';
+  $('#missing').textContent = '';
+  if (!model) { list.innerHTML = '<p class="note">—</p>'; return; }
+  for (const e of model.entries) {
+    const card = document.createElement('div');
+    card.className = 'mat';
+    card.innerHTML = `<div class="mat-h"><i class="sw" style="background:${e.color.getStyle()}"></i><span class="mat-n" title="${esc(e.name)}">${esc(e.name)}</span><small title="Used by ${e.meshes.length} mesh(es)">${e.meshes.length}</small></div><div class="slots"></div>`;
+    const slots = card.querySelector('.slots');
+    for (const k of SLOT_KEYS) slots.append(makeSlot(e, k));
+    list.append(card);
+  }
+  const miss = [...model.missing];
+  if (miss.length) $('#missing').innerHTML = `<div class="miss-box"><b>Missing files</b> — referenced by the model, not dropped<ul>${miss.map(m => `<li>${esc(m)}</li>`).join('')}</ul><span>Drop them on the viewport; they're matched by file name.</span></div>`;
+}
+
+function makeSlot(e, k) {
+  const s = e.slots[k], el = document.createElement('div');
+  el.className = 'slot' + (s.tex ? ' has' : s.missing ? ' miss' : '');
+  const src = s.tex && texSource(s.tex);
+  const res = src ? ` · ${src.width}×${src.height}` : '';
+  el.title = s.tex ? `${s.label}${res}\nClick or drop to replace` : s.missing ? `Missing: ${s.missing}\nClick or drop an image` : `No ${SLOT_NAMES[k].toLowerCase()} texture\nClick or drop an image`;
+  el.innerHTML = `<div class="th">${s.tex ? '' : s.missing ? 'missing' : '+'}</div><div class="lb">${SLOT_NAMES[k]}</div><div class="fn">${esc(s.tex ? s.label : s.missing || '—')}</div>${s.tex ? '<button class="x" title="Clear">×</button>' : ''}`;
+  if (src) {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 112;
+    cv.getContext('2d').drawImage(src, 0, 0, 112, 112);
+    el.querySelector('.th').append(cv);
+  }
+  el.addEventListener('click', ev => {
+    if (ev.target.closest('.x')) { e.slots[k] = { tex: null }; return refreshTextures(); }
+    slotCb = f => setSlotFile(e, k, f);
+    slotInput.click();
+  });
+  el.addEventListener('dragover', ev => { ev.preventDefault(); ev.stopPropagation(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', ev => {
+    ev.preventDefault(); ev.stopPropagation(); endDrag(); el.classList.remove('over');
+    const f = Array.from(ev.dataTransfer?.files || []).find(x => IMG_RE.test(x.name));
+    if (f) setSlotFile(e, k, f); else toast('Drop an image file (png, jpg, tga, webp).');
+  });
+  return el;
+}
+
+function renderMeshes() {
+  const el = $('#meshList');
+  el.textContent = '';
+  if (!model) { el.innerHTML = '<p class="note" style="margin:0">—</p>'; return; }
+  model.meshes.forEach((m, i) => {
+    const s = m.userData.stats, a = m.geometry.attributes;
+    const attrs = [['uv', 'UV0'], ['uv1', 'UV1'], ['uv2', 'UV2'], ['color', 'vertex colors']].filter(([x]) => a[x]).map(([, l]) => l);
+    if (m.isSkinnedMesh) attrs.push('skinned');
+    const row = document.createElement('div');
+    row.className = 'mrow';
+    row.dataset.i = i;
+    row.title = `${fmt(s.tris)} tris · ${fmt(s.verts)} verts · ${fmt(s.split)} split\n${attrs.join(', ') || 'no UVs'}${m.userData.genNormals ? '\nnormals generated (none in file)' : ''}\nClick: show in UV panel · Double-click: frame`;
+    row.innerHTML = `<input type="checkbox" ${m.visible ? 'checked' : ''}><span class="mn">${esc(m.userData.label)}</span><small>${fmt(s.tris)}</small>`;
+    row.querySelector('input').addEventListener('change', ev => {
+      m.visible = ev.target.checked;
+      if (m.userData.nh) m.userData.nh.visible = m.visible;
+      renderStats(); scheduleUV(); requestRender();
+    });
+    const mn = row.querySelector('.mn');
+    mn.addEventListener('click', () => { $('#uvMesh').value = String(i); onUVMesh(); });
+    mn.addEventListener('dblclick', () => frame(m));
+    el.append(row);
+  });
+}
+
+// ---------------------------------------------------------------- UV panel
+const uvc = $('#uvCanvas');
+const uvView = { cx: 0.5, cy: 0.5, zoom: 1 };
+const uvCache = new Map();
+let uvQueued = false;
+
+function buildUVOptions() {
+  const sets = ['uv', 'uv1', 'uv2', 'uv3'].filter(s => model?.meshes.some(m => m.geometry.attributes[s]));
+  if (!sets.length) sets.push('uv');
+  if (!sets.includes(state.uvSet)) state.uvSet = sets[0];
+  $('#uvSetSeg').innerHTML = sets.map(s => `<button data-v="${s}">${UV_NAMES[s]}</button>`).join('');
+  $('#uvMesh').innerHTML = '<option value="all">All visible meshes</option>' +
+    (model ? model.meshes.map((m, i) => `<option value="${i}">${esc(m.userData.label)}</option>`).join('') : '');
+  $('#uvBg').value = model?.entries.some(e => e.slots.base.tex) ? 'base' : '';
+  uvBgTouched = false;
+}
+function onUVMesh() {
+  const v = $('#uvMesh').value;
+  document.querySelectorAll('.mrow').forEach(r => r.classList.toggle('sel', r.dataset.i === v));
+  fitUV();
+}
+$('#uvMesh').addEventListener('change', onUVMesh);
+let uvBgTouched = false;
+$('#uvBg').addEventListener('change', () => { uvBgTouched = true; scheduleUV(); });
+$('#uvClose').addEventListener('click', () => setState('uvPanel', false));
+
+function uvMeshes() {
+  if (!model) return [];
+  const v = $('#uvMesh').value;
+  return v === 'all' || v === '' ? model.meshes.filter(m => m.visible) : [model.meshes[+v]].filter(Boolean);
+}
+// UVs drawn with a small second WebGL view: Canvas 2D gets very slow past ~50k triangles
+const uvR = new THREE.WebGLRenderer({ canvas: uvc, antialias: true });
+uvR.setPixelRatio(Math.min(devicePixelRatio, 2));
+uvR.setClearColor(0x0b0d10, 1);
+const uvScene = new THREE.Scene(), uvCam = new THREE.OrthographicCamera(0, 1, 1, 0, -10, 10);
+const uvBg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, -2), new THREE.MeshBasicMaterial({ toneMapped: false }));
+const uvGroup = new THREE.Group();
+const uvLineMat = new THREE.MeshBasicMaterial({ wireframe: true, toneMapped: false, transparent: true, opacity: 0.85, depthTest: false });
+const uvGrid = (() => {
+  const p = [], c = [], add = (x0, y0, x1, y1, k) => { p.push(x0, y0, -1, x1, y1, -1); c.push(k, k, k, k, k, k); };
+  for (let i = -32; i <= 33; i++) { add(i, -32, i, 33, 0.16); add(-32, i, 33, i, 0.16); }
+  for (let i = 1; i < 8; i++) { add(i / 8, 0, i / 8, 1, 0.1); add(0, i / 8, 1, i / 8, 0.1); }
+  for (const [x0, y0, x1, y1] of [[0, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1], [0, 1, 0, 0]]) add(x0, y0, x1, y1, 0.55);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, toneMapped: false }));
+})();
+uvScene.add(uvBg, uvGrid, uvGroup);
+
+function uvGeom(mesh, set) {
+  const key = mesh.uuid + set;
+  if (uvCache.has(key)) return uvCache.get(key);
+  const src = mesh.geometry, a = src.attributes[set];
+  let g = null;
+  if (a) {
+    const n = a.count, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { pos[i * 3] = a.getX(i); pos[i * 3 + 1] = a.getY(i); }
+    g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    if (src.index) g.setIndex(src.index.clone());
+    const idx = src.index, tn = Math.floor((idx ? idx.count : n) / 3);
+    let out = 0;
+    const off = j => { const u = pos[j * 3], v = pos[j * 3 + 1]; return u < 0 || u > 1 || v < 0 || v > 1; };
+    for (let t = 0; t < tn; t++) {
+      const i0 = idx ? idx.getX(t * 3) : t * 3, i1 = idx ? idx.getX(t * 3 + 1) : t * 3 + 1, i2 = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+      if (off(i0) || off(i1) || off(i2)) out++;
+    }
+    g.userData = { tris: tn, outside: out };
+  }
+  uvCache.set(key, g);
+  return g;
+}
+function fitUV() {
+  // fit 0..1 plus where most UVs are; a few stray verts far away shouldn't shrink the view
+  const gs = uvMeshes().map(m => uvGeom(m, state.uvSet)).filter(Boolean);
+  const n = gs.reduce((a, g) => a + g.attributes.position.count, 0);
+  let x0 = 0, y0 = 0, x1 = 1, y1 = 1;
+  if (n) {
+    const U = new Float32Array(n), V = new Float32Array(n);
+    let o = 0;
+    for (const g of gs) { const p = g.attributes.position.array; for (let i = 0; i < p.length; i += 3) { U[o] = p[i]; V[o++] = p[i + 1]; } }
+    U.sort(); V.sort();
+    const q = a => [a[Math.floor((n - 1) * 0.003)], a[Math.ceil((n - 1) * 0.997)]];
+    const [ua, ub] = q(U), [va, vb] = q(V);
+    if (isFinite(ua) && isFinite(ub)) { x0 = Math.min(0, ua); x1 = Math.max(1, ub); }
+    if (isFinite(va) && isFinite(vb)) { y0 = Math.min(0, va); y1 = Math.max(1, vb); }
+  }
+  uvView.cx = (x0 + x1) / 2; uvView.cy = (y0 + y1) / 2;
+  uvView.zoom = 1 / Math.max(x1 - x0, y1 - y0, 1e-6);
+  scheduleUV();
+}
+function scheduleUV() {
+  if (!state.uvPanel || uvQueued) return;
+  uvQueued = true;
+  requestAnimationFrame(() => { uvQueued = false; drawUV(); });
+}
+const ppuOf = () => Math.min(uvc.clientWidth, uvc.clientHeight) * 0.88 * uvView.zoom;
+
+function drawUV() {
+  const W = uvc.clientWidth, H = uvc.clientHeight;
+  if (!W || !H) return;
+  const sz = uvR.getSize(new THREE.Vector2());
+  if (sz.x !== W || sz.y !== H) uvR.setSize(W, H, false);
+  const ppu = ppuOf();
+  uvCam.left = uvView.cx - W / 2 / ppu; uvCam.right = uvView.cx + W / 2 / ppu;
+  uvCam.bottom = uvView.cy - H / 2 / ppu; uvCam.top = uvView.cy + H / 2 / ppu;
+  uvCam.updateProjectionMatrix();
+  const meshes = uvMeshes();
+  // texture behind 0..1 — normal / roughness shown as raw texels
+  const bgKey = $('#uvBg').value, bgTex = bgKey && meshes[0]?.userData.entries[0]?.slots[bgKey].tex;
+  uvBg.visible = !!bgTex;
+  if (bgTex) {
+    const t = bgKey === 'base' ? bgTex : displayTex(bgTex);
+    if (uvBg.material.map !== t) { uvBg.material.map = t; uvBg.material.needsUpdate = true; }
+  }
+  uvLineMat.color.set(bgTex ? 0xff9a3c : 0x4cc2ff);
+  uvGroup.clear();
+  let tris = 0, outside = 0, lacking = 0;
+  for (const m of meshes) {
+    const g = uvGeom(m, state.uvSet);
+    if (!g) { lacking++; continue; }
+    tris += g.userData.tris; outside += g.userData.outside;
+    uvGroup.add(new THREE.Mesh(g, uvLineMat));
+  }
+  uvR.render(uvScene, uvCam);
+  const uvn = UV_NAMES[state.uvSet];
+  $('#uvInfo').textContent = !model ? 'No model' : !tris ? `No ${uvn} on this selection`
+    : `${fmt(tris)} tris · ${uvn}${outside ? ` · ${fmt(outside)} outside 0–1` : ''}${lacking ? ` · ${lacking} without ${uvn}` : ''}`;
+}
+
+let uvDrag = null;
+uvc.addEventListener('pointerdown', e => { uvDrag = { x: e.clientX, y: e.clientY }; uvc.setPointerCapture(e.pointerId); });
+uvc.addEventListener('pointermove', e => {
+  if (!uvDrag) return;
+  const ppu = ppuOf();
+  uvView.cx -= (e.clientX - uvDrag.x) / ppu;
+  uvView.cy += (e.clientY - uvDrag.y) / ppu;
+  uvDrag = { x: e.clientX, y: e.clientY };
+  scheduleUV();
+});
+uvc.addEventListener('pointerup', () => { uvDrag = null; });
+uvc.addEventListener('pointercancel', () => { uvDrag = null; });
+uvc.addEventListener('dblclick', fitUV);
+uvc.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = uvc.getBoundingClientRect(), mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2;
+  const p0 = ppuOf(), u = uvView.cx + mx / p0, v = uvView.cy - my / p0;
+  uvView.zoom = Math.min(Math.max(uvView.zoom * Math.exp(-e.deltaY * 0.0015), 1e-3), 1e4);
+  const p1 = ppuOf();
+  uvView.cx = u - mx / p1; uvView.cy = v + my / p1;
+  scheduleUV();
+}, { passive: false });
+new ResizeObserver(() => scheduleUV()).observe(uvc);
+
+// ---------------------------------------------------------------- init
+buildUVOptions();
+renderAll();
+window.__viewerReady = true;
+if (window.__earlyDrop?.length) { handleFiles(window.__earlyDrop); window.__earlyDrop = null; }
+</script>
+</body>
+</html>
