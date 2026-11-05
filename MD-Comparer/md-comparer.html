@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MD Compare</title>
+<style>
+:root{
+  --bg:#fff;--fg:#1f2328;--mut:#656d76;--line:#d0d7de;--panel:#f6f8fa;--acc:#0969da;
+  --add:#e6ffec;--addn:#ccffd8;--addw:#abf2bc;
+  --del:#ffebe9;--deln:#ffd7d5;--delw:rgba(255,129,130,.45);
+  --hatch:rgba(127,127,127,.18);--dot:#bf8700;--plus:#1a7f37;--minus:#cf222e;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0d1117;--fg:#e6edf3;--mut:#8d96a0;--line:#30363d;--panel:#161b22;--acc:#4493f8;
+  --add:rgba(46,160,67,.15);--addn:rgba(46,160,67,.25);--addw:rgba(46,160,67,.45);
+  --del:rgba(248,81,73,.12);--deln:rgba(248,81,73,.22);--delw:rgba(248,81,73,.45);
+  --dot:#d29922;--plus:#3fb950;--minus:#f85149;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+label{display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;user-select:none}
+button{font:inherit;font-size:13px;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--mut)}
+.seg{display:flex}
+.seg button{border-radius:6px 0 0 6px}
+.seg button+button{border-radius:0 6px 6px 0;border-left:0}
+.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+#status{font-size:13px;color:var(--mut)}
+.hint{margin-left:auto;font-size:12px;color:var(--mut)}
+#view{flex:1;overflow:auto;min-height:0}
+.welcome{height:100%;display:grid;place-items:center;padding:24px}
+.welcome div{border:2px dashed var(--line);border-radius:12px;padding:48px 32px;text-align:center;color:var(--mut);max-width:520px}
+.welcome b{display:block;font-size:18px;color:var(--fg);margin-bottom:8px}
+#drop{position:fixed;inset:0;display:none;place-items:center;background:color-mix(in srgb,var(--acc) 12%,transparent);border:3px dashed var(--acc);font-size:22px;font-weight:600;color:var(--acc);pointer-events:none;z-index:9}
+#drop.on{display:grid}
+
+/* file header */
+.fh{display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);border-bottom:1px solid var(--line);font:13px system-ui,sans-serif;min-width:0}
+th+th .fh{border-left:1px solid var(--line)}
+.fh .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text}
+.fh .dot{color:var(--dot)}
+.fh .sp{flex:1}
+.fh button{padding:1px 7px;font-size:12px}
+.st{font:12px ui-monospace,monospace;white-space:nowrap}
+.st .a{color:var(--plus)}.st .d{color:var(--minus)}.st .m{color:var(--mut)}
+.badge{font-size:11px;padding:1px 7px;border-radius:10px;background:var(--acc);color:#fff}
+
+/* compare table */
+table{border-collapse:collapse;table-layout:fixed;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+col.cn{width:3.6em}
+th{position:sticky;top:0;z-index:1;padding:0;text-align:left;font-weight:normal}
+tbody tr{height:1.5em}
+td{vertical-align:top;padding:0 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+td.n{padding:0 8px 0 4px;text-align:right;color:var(--mut);user-select:none;border-left:1px solid var(--line)}
+td.n:first-child{border-left:0}
+td.add{background:var(--add)} td.n.add{background:var(--addn)}
+td.del{background:var(--del)} td.n.del{background:var(--deln)}
+td.empty{background:repeating-linear-gradient(-45deg,transparent 0 5px,var(--hatch) 5px 6px)}
+.wa{background:var(--addw);border-radius:2px}
+.wd{background:var(--delw);border-radius:2px}
+.hide tr.eq{display:none}
+.hide tr.eq+tr.ch td{border-top:1px dashed var(--line)}
+
+/* edit mode */
+.edit{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(340px,1fr);height:100%}
+.ed{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ed+.ed{border-left:1px solid var(--line)}
+textarea{flex:1;resize:none;border:0;outline:0;padding:8px 12px;background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;tab-size:4}
+@media (max-width:800px){.hint{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <strong>MD Compare</strong>
+  <button id="open">Open…</button>
+  <button id="new">New</button>
+  <div class="seg"><button id="mc" class="on">Compare</button><button id="me">Edit</button></div>
+  <label><input type="checkbox" id="hide"> Only changes</label>
+  <label><input type="checkbox" id="ws"> Ignore whitespace</label>
+  <span id="status"></span>
+  <span class="hint">Drop .md files anywhere · first file is the base · double-click a line to edit it</span>
+</header>
+<main id="view"></main>
+<div id="drop">Drop .md files to add them</div>
+<input type="file" id="file" multiple accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain" hidden>
+
+<script>
+const files = [];            // { name, text, dirty }  — files[0] is the base
+let mode = 'compare';
+const $ = id => document.getElementById(id);
+const view = $('view');
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- diff (Myers) ---------- */
+function myers(a, b) {
+  const n = a.length, m = b.length, max = n + m, off = max + 1;
+  const v = new Int32Array(2 * max + 3), trace = [];
+  let done = false;
+  for (let d = 0; d <= max && !done; d++) {
+    if (d > 2500) return [...a.map((_, i) => ['-', i, -1]), ...b.map((_, j) => ['+', -1, j])]; // huge rewrite: give up gracefully
+    trace.push(v.slice(off - d, off + d + 1));
+    for (let k = -d; k <= d; k += 2) {
+      let x = (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) ? v[off + k + 1] : v[off + k - 1] + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) { x++; y++; }
+      v[off + k] = x;
+      if (x >= n && y >= m) { done = true; break; }
+    }
+  }
+  const ops = [];
+  let x = n, y = m;
+  for (let d = trace.length - 1; d > 0; d--) {
+    const s = trace[d], g = k => s[k + d], k = x - y;
+    const pk = (k === -d || (k !== d && g(k - 1) < g(k + 1))) ? k + 1 : k - 1;
+    const px = g(pk), py = px - pk;
+    while (x > px && y > py) { x--; y--; ops.push(['=', x, y]); }
+    ops.push(x === px ? ['+', -1, py] : ['-', px, -1]);
+    x = px; y = py;
+  }
+  while (x > 0) { x--; y--; ops.push(['=', x, y]); }
+  return ops.reverse();
+}
+
+// ops: ['=', i, j] | ['-', i, -1] | ['+', -1, j]
+function diff(a, b) {
+  let s = 0, ea = a.length, eb = b.length;
+  while (s < ea && s < eb && a[s] === b[s]) s++;
+  while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) { ea--; eb--; }
+  const ops = [];
+  for (let i = 0; i < s; i++) ops.push(['=', i, i]);
+  for (const [t, i, j] of myers(a.slice(s, ea), b.slice(s, eb))) ops.push([t, i < 0 ? -1 : i + s, j < 0 ? -1 : j + s]);
+  for (let i = ea, j = eb; i < a.length; i++, j++) ops.push(['=', i, j]);
+  return ops;
+}
+
+// word-level highlight for a changed line pair; null if the lines are too different to be useful
+const TOK = /\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
+function wdiff(a, b) {
+  const ta = a.match(TOK) || [], tb = b.match(TOK) || [];
+  let ha = '', hb = '', ra = '', rb = '', same = 0;
+  const flush = () => {
+    if (ra) ha += `<span class="wd">${esc(ra)}</span>`;
+    if (rb) hb += `<span class="wa">${esc(rb)}</span>`;
+    ra = rb = '';
+  };
+  for (const [t, i, j] of diff(ta, tb)) {
+    if (t === '=') { flush(); ha += esc(ta[i]); hb += esc(tb[j]); if (/\S/.test(ta[i])) same += ta[i].length; }
+    else if (t === '-') ra += ta[i];
+    else rb += tb[j];
+  }
+  flush();
+  const total = (a + b).replace(/\s+/g, '').length;
+  return !total || 2 * same >= 0.4 * total ? [ha, hb] : null;
+}
+
+/* ---------- rendering ---------- */
+function header(i, st) {
+  const f = files[i];
+  return `<div class="fh">
+    <span class="nm" data-i="${i}" title="${esc(f.name)} — double-click to rename">${esc(f.name)}</span>
+    ${f.dirty ? '<span class="dot" title="Unsaved changes">●</span>' : ''}
+    ${st ? `<span class="st" title="vs base: ${st.add} added, ${st.del} removed, ${st.mod} changed lines"><span class="a">+${st.add}</span> <span class="d">−${st.del}</span> <span class="m">~${st.mod}</span></span>` : ''}
+    <span class="sp"></span>
+    ${i === 0 ? '<span class="badge">BASE</span>' : `<button data-a="base" data-i="${i}" title="Compare the other files against this one">Set base</button>`}
+    <button data-a="dl" data-i="${i}" title="Download this file (Ctrl+S while editing)">Save</button>
+    <button data-a="rm" data-i="${i}" title="Close">✕</button>
+  </div>`;
+}
+
+function render() {
+  $('mc').classList.toggle('on', mode === 'compare');
+  $('me').classList.toggle('on', mode === 'edit');
+  if (!files.length) {
+    view.innerHTML = `<div class="welcome"><div><b>Drop two or more .md files here</b>
+      or <button data-a="open">choose files</button>. The first file is the base; the others are compared against it.</div></div>`;
+    $('status').textContent = '';
+    return;
+  }
+  mode === 'edit' ? renderEdit() : renderCompare();
+}
+
+function renderCompare() {
+  const key = $('ws').checked ? s => s.trim().replace(/\s+/g, ' ') : s => s;
+  const L = files.map(f => f.text.split('\n'));
+  const K = L.map(a => a.map(key));
+  const nb = L[0].length, match = [], ins = [], stats = [null];
+
+  // align every other file to the base: match[f][baseLine] and ins[f][gap] (lines added before base line `gap`)
+  for (let f = 1; f < files.length; f++) {
+    const m = [], gaps = Array.from({ length: nb + 1 }, () => []), st = { add: 0, del: 0, mod: 0 };
+    let ai = 0, D = [], A = [];
+    const flush = () => {           // pair removed+added lines as "changed", rest are pure deletes/inserts
+      const p = Math.min(D.length, A.length);
+      D.forEach((a, k) => m[a] = k < p ? { t: 'mod', j: A[k] } : { t: 'del' });
+      A.slice(p).forEach(b => gaps[ai].push(b));
+      st.mod += p; st.del += D.length - p; st.add += A.length - p;
+      D = []; A = [];
+    };
+    for (const [t, a, b] of diff(K[0], K[f])) {
+      if (t === '=') { flush(); m[a] = { t: 'eq', j: b }; ai = a + 1; }
+      else if (t === '-') { D.push(a); ai = a + 1; }
+      else A.push(b);
+    }
+    flush();
+    match.push(m); ins.push(gaps); stats.push(st);
+  }
+
+  const cell = (f, j, html, cls = '') =>
+    `<td class="n ${cls}">${j < 0 ? '' : j + 1}</td><td class="c ${cls}"${j < 0 ? '' : ` data-f="${f}" data-l="${j}"`}>${html}</td>`;
+  let body = '', blocks = 0, prev = false;
+  const row = (b, cs) => {
+    const ch = b < 0 || cs.some(c => c.t !== 'eq');
+    if (ch && !prev) blocks++;
+    prev = ch;
+    let h;
+    if (b < 0) h = cell(0, -1, '', 'empty');
+    else {
+      const dc = cs.filter(c => c.t !== 'eq');
+      const w = dc.length === 1 && dc[0].t === 'mod' && wdiff(L[0][b], L[cs.indexOf(dc[0]) + 1][dc[0].j]);
+      h = cell(0, b, w ? w[0] : esc(L[0][b]), dc.length ? 'del' : '');
+    }
+    cs.forEach((c, k) => {
+      const f = k + 1;
+      if (!c || c.t === 'del') h += cell(f, -1, '', 'empty');
+      else if (c.t === 'eq') h += cell(f, c.j, esc(L[f][c.j]));
+      else if (c.t === 'add') h += cell(f, c.j, esc(L[f][c.j]), 'add');
+      else { const w = wdiff(L[0][b], L[f][c.j]); h += cell(f, c.j, w ? w[1] : esc(L[f][c.j]), 'add'); }
+    });
+    body += `<tr class="${ch ? 'ch' : 'eq'}">${h}</tr>`;
+  };
+  for (let g = 0; g <= nb; g++) {
+    const n = Math.max(0, ...ins.map(x => x[g].length));
+    for (let r = 0; r < n; r++) row(-1, ins.map(x => x[g][r] != null ? { t: 'add', j: x[g][r] } : null));
+    if (g < nb) row(g, match.map(m => m[g]));
+  }
+
+  const n = files.length;
+  view.innerHTML = `<table style="width:max(100%,${n * 400}px)"><colgroup>${'<col class="cn"><col>'.repeat(n)}</colgroup>
+    <thead><tr>${files.map((_, i) => `<th colspan="2">${header(i, stats[i])}</th>`).join('')}</tr></thead>
+    <tbody>${body}</tbody></table>`;
+  $('status').textContent = n < 2 ? 'Add another file to compare' : blocks ? `${blocks} change${blocks > 1 ? 's' : ''}` : 'No differences';
+}
+
+function renderEdit() {
+  view.innerHTML = `<div class="edit">${files.map((_, i) =>
+    `<div class="ed" data-i="${i}">${header(i)}<textarea data-i="${i}" spellcheck="false"></textarea></div>`).join('')}</div>`;
+  view.querySelectorAll('textarea').forEach(t => t.value = files[+t.dataset.i].text);
+  $('status').textContent = 'Editing · switch to Compare to see differences';
+}
+
+function refreshHeader(i) {
+  const el = mode === 'edit' && view.querySelector(`.ed[data-i="${i}"] .fh`);
+  el ? el.outerHTML = header(i) : render();
+}
+
+function openEditor(f, line) {
+  mode = 'edit'; render();
+  const ta = view.querySelector(`textarea[data-i="${f}"]`);
+  const pos = files[f].text.split('\n').slice(0, line).join('\n').length + (line > 0 ? 1 : 0);
+  const full = ta.value;
+  ta.value = full.slice(0, pos);          // measure where the line sits
+  const h = ta.scrollHeight;
+  ta.value = full;
+  ta.closest('.ed').scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  ta.focus({ preventScroll: true });
+  ta.setSelectionRange(pos, pos);
+  ta.scrollTop = h > ta.clientHeight ? h - ta.clientHeight / 3 : 0;
+}
+
+/* ---------- files ---------- */
+async function addFiles(list) {
+  for (const f of list) {
+    if (!/\.(md|markdown|mdown|mkd|txt)$/i.test(f.name) && !f.type.startsWith('text/')) continue;
+    const text = (await f.text()).replace(/\r\n?/g, '\n');
+    let name = f.name, k = 2;
+    while (files.some(x => x.name === name)) name = f.name.replace(/(\.[^.]*)?$/, ` (${k++})$1`);
+    files.push({ name, text, dirty: false });
+  }
+  render();
+}
+
+function download(i) {
+  const f = files[i], a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([f.text], { type: 'text/markdown' }));
+  a.download = f.name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  f.dirty = false;
+  refreshHeader(i);
+}
+
+/* ---------- events ---------- */
+$('open').onclick = () => $('file').click();
+$('file').onchange = e => { const list = [...e.target.files]; e.target.value = ''; addFiles(list); };
+$('mc').onclick = () => { mode = 'compare'; render(); };
+$('me').onclick = () => { mode = 'edit'; render(); };
+$('hide').onchange = e => view.classList.toggle('hide', e.target.checked);
+$('ws').onchange = () => mode === 'compare' && render();
+$('new').onclick = () => {
+  let k = 1;
+  while (files.some(f => f.name === `untitled-${k}.md`)) k++;
+  files.push({ name: `untitled-${k}.md`, text: '', dirty: false });
+  mode = 'edit'; render();
+  view.querySelector(`textarea[data-i="${files.length - 1}"]`).focus();
+};
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-a]');
+  if (!b) return;
+  const i = +b.dataset.i, a = b.dataset.a;
+  if (a === 'open') $('file').click();
+  else if (a === 'dl') download(i);
+  else if (a === 'base') { files.unshift(files.splice(i, 1)[0]); render(); }
+  else if (a === 'rm' && (!files[i].dirty || confirm(`Discard unsaved changes to ${files[i].name}?`))) { files.splice(i, 1); render(); }
+});
+
+document.addEventListener('dblclick', e => {
+  const nm = e.target.closest('.nm');
+  if (nm) {
+    const i = +nm.dataset.i, v = prompt('Rename file:', files[i].name);
+    if (v && v.trim()) { files[i].name = v.trim(); refreshHeader(i); }
+    return;
+  }
+  const td = e.target.closest('td.c[data-f]');
+  if (td) openEditor(+td.dataset.f, +td.dataset.l);
+});
+
+view.addEventListener('input', e => {
+  if (e.target.tagName !== 'TEXTAREA') return;
+  const i = +e.target.dataset.i, f = files[i];
+  f.text = e.target.value;
+  if (!f.dirty) { f.dirty = true; refreshHeader(i); }
+});
+
+addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+    e.preventDefault();
+    const t = document.activeElement;
+    if (t && t.tagName === 'TEXTAREA') download(+t.dataset.i);
+  }
+});
+
+// drag & drop anywhere
+const hasFiles = e => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+let depth = 0;
+addEventListener('dragenter', e => { if (hasFiles(e)) { depth++; $('drop').classList.add('on'); } });
+addEventListener('dragleave', e => { if (hasFiles(e) && --depth <= 0) { depth = 0; $('drop').classList.remove('on'); } });
+addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+addEventListener('drop', e => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  depth = 0; $('drop').classList.remove('on');
+  addFiles([...e.dataTransfer.files]);
+});
+
+addEventListener('beforeunload', e => { if (files.some(f => f.dirty)) { e.preventDefault(); e.returnValue = ''; } });
+
+render();
+</script>
+</body>
+</html>
