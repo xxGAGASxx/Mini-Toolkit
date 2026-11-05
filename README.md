@@ -8,6 +8,9 @@ Various Web based tools
 ### Sprite Cutter
 - Extract sprites form image
 
+### Sprite Sheet Maker
+- Sort sprites into a grid
+
 ### MD Comparer
 - compare 2 or more md files
 
