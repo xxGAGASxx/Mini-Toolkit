@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text Toolkit</title>
+<style>
+  :root {
+    --bg: #f5f5f3; --panel: #ffffff; --text: #1d1d1f; --muted: #6b6b70;
+    --line: #e1e1dc; --hover: #f0f0eb; --field: #fafaf8;
+    --accent: #2f6fed; --accent-ink: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151517; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa1;
+      --line: #34343a; --hover: #2a2a2f; --field: #18181b;
+      --accent: #5b8cff; --accent-ink: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header { max-width: 1200px; margin: 0 auto; padding: 20px 16px 0; }
+  h1 { font-size: 20px; margin: 0; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main {
+    max-width: 1200px; margin: 0 auto; padding: 16px 16px 40px;
+    display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start;
+  }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .editor { position: sticky; top: 16px; }
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+    .editor { position: static; }
+  }
+  h2 {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 0 0 10px;
+  }
+  textarea {
+    width: 100%; height: 60vh; min-height: 300px; resize: vertical;
+    padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--field); color: var(--text);
+    font: 15px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .toolbar { display: flex; gap: 6px; margin-bottom: 10px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+  .stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+  button {
+    font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px;
+    background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  button:hover { background: var(--hover); }
+  button:disabled { opacity: .45; cursor: default; background: var(--panel); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.primary:hover { filter: brightness(1.08); }
+  input:not([type=checkbox]), select {
+    width: 100%; font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px;
+    background: var(--field); color: var(--text);
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .grid button { text-align: left; }
+  .stack { display: flex; flex-direction: column; gap: 6px; }
+  .row { display: flex; gap: 6px; }
+  .row > * { flex: 1; min-width: 0; }
+  .opts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0; font-size: 13px; color: var(--muted); }
+  .opts label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .info { min-height: 1.4em; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .drop {
+    border: 2px dashed var(--line); border-radius: 10px; padding: 22px 12px;
+    text-align: center; color: var(--muted); cursor: pointer;
+  }
+  .drop:hover { border-color: var(--accent); color: var(--text); }
+  .lang { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); font-size: 13px; }
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; display: none; place-items: center; pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 3px dashed var(--accent); color: var(--accent); font-size: 20px; font-weight: 600;
+  }
+  body.dragging .overlay { display: grid; }
+</style>
+</head>
+<body>
+<div class="overlay">Drop image to extract text</div>
+
+<header>
+  <h1>Text Toolkit</h1>
+  <p>Convert case, find &amp; replace, add prefixes or suffixes, count words, and pull text from images.</p>
+</header>
+
+<main>
+  <section class="card editor">
+    <div class="toolbar">
+      <button id="undo" disabled>Undo</button>
+      <button id="copy">Copy</button>
+      <button id="clear">Clear</button>
+    </div>
+    <textarea id="text" spellcheck="false"
+      placeholder="Type or paste text here… You can also drop or paste an image to extract its text."></textarea>
+    <div class="stats">
+      <span><b id="sWords">0</b> words</span>
+      <span><b id="sChars">0</b> characters</span>
+      <span><b id="sNoSp">0</b> without spaces</span>
+      <span><b id="sLines">0</b> lines</span>
+    </div>
+  </section>
+
+  <div class="side">
+    <section class="card">
+      <h2>Text case</h2>
+      <div class="grid" id="cases">
+        <button data-case="sentence">Sentence case</button>
+        <button data-case="word">Word Case</button>
+        <button data-case="upper">UPPER CASE</button>
+        <button data-case="lower">lower case</button>
+        <button data-case="alt">aLtErNaTiNg</button>
+        <button data-case="inverse">iNVERSE cASE</button>
+        <button data-case="camel">camelCase</button>
+        <button data-case="pascal">PascalCase</button>
+        <button data-case="snake">snake_case</button>
+        <button data-case="kebab">kebab-case</button>
+        <button data-case="constant">CONSTANT_CASE</button>
+        <button data-case="dot">dot.case</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Find &amp; replace</h2>
+      <div class="stack">
+        <input id="find" placeholder="Find character or word">
+        <input id="replace" placeholder="Replace with">
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="matchCase"> Match case</label>
+        <label><input type="checkbox" id="whole"> Whole word</label>
+        <label><input type="checkbox" id="regex"> Regex</label>
+      </div>
+      <div class="row">
+        <button id="findBtn">Find next</button>
+        <button id="replaceBtn" class="primary">Replace all</button>
+        <button id="removeBtn">Remove all</button>
+      </div>
+      <div class="info" id="findInfo"></div>
+    </section>
+
+    <section class="card">
+      <h2>Prefix / suffix</h2>
+      <div class="row">
+        <input id="prefix" placeholder="Prefix">
+        <input id="suffix" placeholder="Suffix">
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="skipEmpty" checked> Skip empty lines</label>
+      </div>
+      <div class="row">
+        <button id="psAdd" class="primary">Add to each line</button>
+        <button id="psRemove">Remove from each line</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Image to text</h2>
+      <div class="drop" id="drop">Drop an image here, click to choose,<br>or paste one (Ctrl/⌘+V)</div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <label class="lang">Language
+        <select id="lang">
+          <option value="eng">English</option>
+          <option value="deu">German</option>
+          <option value="fra">French</option>
+          <option value="spa">Spanish</option>
+          <option value="ita">Italian</option>
+          <option value="por">Portuguese</option>
+          <option value="rus">Russian</option>
+        </select>
+      </label>
+      <div class="opts">
+        <label><input type="checkbox" id="textOnly" checked> Text only (ignore icons &amp; symbols)</label>
+      </div>
+      <div class="info" id="ocrStatus"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const ta = $('text');
+const undoStack = [];
+
+/* ---------- Core: set text with undo ---------- */
+function setText(value) {
+  if (value === ta.value) return;
+  undoStack.push(ta.value);
+  if (undoStack.length > 100) undoStack.shift();
+  ta.value = value;
+  $('undo').disabled = false;
+  refresh();
+}
+
+function refresh() {
+  const t = ta.value;
+  $('sWords').textContent = (t.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) || []).length;
+  $('sChars').textContent = [...t].length;
+  $('sNoSp').textContent = [...t.replace(/\s/g, '')].length;
+  $('sLines').textContent = t ? t.split('\n').length : 0;
+  countMatches();
+}
+
+ta.addEventListener('input', refresh);
+
+$('undo').onclick = () => {
+  if (!undoStack.length) return;
+  ta.value = undoStack.pop();
+  $('undo').disabled = !undoStack.length;
+  refresh();
+};
+
+$('clear').onclick = () => setText('');
+
+$('copy').onclick = async () => {
+  try { await navigator.clipboard.writeText(ta.value); }
+  catch { ta.select(); document.execCommand('copy'); }
+  const b = $('copy'); b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1200);
+};
+
+/* ---------- Text case ---------- */
+const cap = w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+const splitWords = s => s.replace(/['’]/g, '').replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2').match(/[\p{L}\p{N}]+/gu) || [];
+const perLine = fn => s => s.split('\n').map(fn).join('\n');
+const joinWords = (sep, fn) => perLine(s => splitWords(s).map(fn).join(sep));
+
+const cases = {
+  sentence: s => s.toLowerCase()
+    .replace(/(^\s*|[.!?]\s+)(\p{L})/gmu, (m, a, b) => a + b.toUpperCase())
+    .replace(/(?<![\p{L}.])i(?![\p{L}.])/gu, 'I'),
+  word: s => s.toLowerCase().replace(/(^|[^\p{L}\p{N}'’])(\p{L})/gu, (m, a, b) => a + b.toUpperCase()),
+  upper: s => s.toUpperCase(),
+  lower: s => s.toLowerCase(),
+  alt: s => { let i = 0; return s.replace(/\p{L}/gu, c => i++ % 2 ? c.toUpperCase() : c.toLowerCase()); },
+  inverse: s => s.replace(/\p{L}/gu, c => c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()),
+  camel: perLine(s => splitWords(s).map((w, i) => i ? cap(w) : w.toLowerCase()).join('')),
+  pascal: joinWords('', cap),
+  snake: joinWords('_', w => w.toLowerCase()),
+  kebab: joinWords('-', w => w.toLowerCase()),
+  constant: joinWords('_', w => w.toUpperCase()),
+  dot: joinWords('.', w => w.toLowerCase()),
+};
+
+$('cases').onclick = e => {
+  const key = e.target.closest('button')?.dataset.case;
+  if (key) setText(cases[key](ta.value));
+};
+
+/* ---------- Find / replace / remove ---------- */
+function buildRegex() {
+  const f = $('find').value;
+  if (!f) return null;
+  let src = $('regex').checked ? f : f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if ($('whole').checked) src = `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
+  try { return new RegExp(src, 'gu' + ($('matchCase').checked ? '' : 'i')); }
+  catch { return 'invalid'; }
+}
+
+function countMatches() {
+  const re = buildRegex(), info = $('findInfo');
+  if (!re) return info.textContent = '';
+  if (re === 'invalid') return info.textContent = 'Invalid pattern';
+  const n = (ta.value.match(re) || []).length;
+  info.textContent = `${n} ${n === 1 ? 'match' : 'matches'}`;
+}
+
+function findNext() {
+  const re = buildRegex();
+  if (!re || re === 'invalid') return;
+  const all = [...ta.value.matchAll(re)];
+  if (!all.length) return;
+  let k = all.findIndex(m => m.index >= ta.selectionEnd);
+  if (k < 0) k = 0; // wrap around
+  const m = all[k];
+  ta.blur();
+  ta.setSelectionRange(m.index, m.index + m[0].length);
+  ta.focus();
+  $('findInfo').textContent = `Match ${k + 1} of ${all.length}`;
+}
+
+function replaceAll(replacement) {
+  const re = buildRegex();
+  if (!re || re === 'invalid') return;
+  // In regex mode allow $1 etc.; otherwise insert the text literally
+  setText(ta.value.replace(re, $('regex').checked ? replacement : () => replacement));
+}
+
+['find', 'matchCase', 'whole', 'regex'].forEach(id => $(id).addEventListener('input', countMatches));
+$('find').addEventListener('keydown', e => { if (e.key === 'Enter') findNext(); });
+$('findBtn').onclick = findNext;
+$('replaceBtn').onclick = () => replaceAll($('replace').value);
+$('removeBtn').onclick = () => replaceAll('');
+
+/* ---------- Prefix / suffix ---------- */
+const eachLine = fn => setText(ta.value.split('\n').map(fn).join('\n'));
+
+$('psAdd').onclick = () => {
+  const p = $('prefix').value, s = $('suffix').value, skip = $('skipEmpty').checked;
+  eachLine(l => skip && !l.trim() ? l : p + l + s);
+};
+
+$('psRemove').onclick = () => {
+  const p = $('prefix').value, s = $('suffix').value;
+  eachLine(l => {
+    if (p && l.startsWith(p)) l = l.slice(p.length);
+    if (s && l.endsWith(s)) l = l.slice(0, -s.length);
+    return l;
+  });
+};
+
+/* ---------- Image to text (Tesseract.js, loaded on first use) ---------- */
+const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+let tessLoading = null, busy = false;
+const ocrStatus = msg => $('ocrStatus').textContent = msg;
+
+function loadTesseract() {
+  return tessLoading ||= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = TESSERACT_URL;
+    s.onload = resolve;
+    s.onerror = () => { tessLoading = null; reject(new Error('Could not load the OCR library. Check your internet connection.')); };
+    document.head.append(s);
+  });
+}
+
+// Keep one worker around so repeat scans are fast; recreate it if the language changes
+let worker = null, workerLang = '';
+async function getWorker(lang) {
+  if (worker && workerLang === lang) return worker;
+  if (worker) await worker.terminate();
+  worker = null;
+  worker = await Tesseract.createWorker(lang, 1, {
+    logger: m => m.status && ocrStatus(
+      m.status.charAt(0).toUpperCase() + m.status.slice(1) +
+      (m.progress ? ` ${Math.round(m.progress * 100)}%` : '')
+    ),
+  });
+  workerLang = lang;
+  return worker;
+}
+
+// Upscale small images (small text reads much better when larger) and flatten transparency onto white
+async function prepareImage(file) {
+  try {
+    const img = await createImageBitmap(file);
+    const scale = Math.max(1, Math.min(4, 2000 / img.width, 12000 / img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  } catch {
+    return file; // let the OCR engine try the original
+  }
+}
+
+// Icons usually come back as low-confidence words, symbol-only fragments or stray single letters.
+// Drop those and keep the real words, preserving lines and paragraphs.
+const MIN_CONFIDENCE = 60;
+const alnumCount = s => (s.match(/[\p{L}\p{N}]/gu) || []).length;
+
+function cleanWord(w) {
+  if (w.confidence < MIN_CONFIDENCE) return '';
+  const t = w.text
+    .replace(/^[^\p{L}\p{N}"'“‘(\[$€£#+-]+/u, '')     // junk stuck to the front (e.g. "©Settings")
+    .replace(/[^\p{L}\p{N}.,!?;:%"'”’)\]+#]+$/u, ''); // junk stuck to the end
+  if (!alnumCount(t)) return '';                     // symbols only
+  if (t.length === 1 && w.confidence < 85) return ''; // lone character, likely an icon
+  return t;
+}
+
+function textOnly(blocks) {
+  const paragraphs = [];
+  for (const block of blocks || []) {
+    for (const para of block.paragraphs) {
+      const lines = para.lines
+        .map(line => line.words.map(cleanWord).filter(Boolean).join(' '))
+        .filter(line => alnumCount(line) >= 2);
+      if (lines.length) paragraphs.push(lines.join('\n'));
+    }
+  }
+  return paragraphs.join('\n\n');
+}
+
+async function imageToText(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return ocrStatus('Please use an image file (PNG, JPG, WebP…).');
+  if (busy) return;
+  busy = true;
+  try {
+    ocrStatus('Loading OCR engine…');
+    await loadTesseract();
+    const w = await getWorker($('lang').value);
+    const image = await prepareImage(file);
+    const { data } = await w.recognize(image, {}, { text: true, blocks: true });
+    const text = ($('textOnly').checked ? textOnly(data.blocks) : data.text).trim();
+    if (!text) { ocrStatus('No text found in the image.'); return; }
+    setText(ta.value ? ta.value.replace(/\s*$/, '') + '\n\n' + text : text);
+    ocrStatus(`Done — added text from “${file.name || 'pasted image'}”.`);
+  } catch (err) {
+    ocrStatus('Error: ' + (err.message || err));
+  } finally {
+    busy = false;
+  }
+}
+
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => { imageToText(e.target.files[0]); e.target.value = ''; };
+
+let dragDepth = 0;
+const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+addEventListener('dragenter', e => { if (hasFiles(e)) { dragDepth++; document.body.classList.add('dragging'); } });
+addEventListener('dragleave', e => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+addEventListener('dragover', e => { if (hasFiles(e)) e.preventDefault(); });
+addEventListener('drop', e => {
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('dragging');
+  imageToText(e.dataTransfer.files[0]);
+});
+
+addEventListener('paste', e => {
+  const img = [...(e.clipboardData?.files || [])].find(f => f.type.startsWith('image/'));
+  if (img) { e.preventDefault(); imageToText(img); }
+});
+
+refresh();
+</script>
+</body>
+</html>
