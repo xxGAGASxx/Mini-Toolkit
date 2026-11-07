@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diagram Editor</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2" y="3" width="9" height="7" rx="2" class="logo-fill"/>
+        <rect x="13" y="14" width="9" height="7" rx="2" class="logo-line"/>
+        <path d="M6.5 10v4.5a3 3 0 0 0 3 3H13" class="logo-link"/>
+      </svg>
+      <input id="docName" class="doc-name" value="Untitled diagram" spellcheck="false" aria-label="Diagram name">
+    </div>
+
+    <nav class="menubar" id="menubar" aria-label="Main menu">
+      <div class="menu">
+        <button type="button" class="menu-btn">File</button>
+        <div class="menu-list">
+          <button type="button" data-cmd="new">New</button>
+          <button type="button" data-cmd="open">Open…<kbd>Ctrl+O</kbd></button>
+          <button type="button" data-cmd="example">Open example</button>
+          <hr>
+          <button type="button" data-cmd="save">Save<kbd>Ctrl+S</kbd></button>
+          <hr>
+          <button type="button" data-cmd="exportPng">Export PNG</button>
+          <button type="button" data-cmd="exportPng2x">Export PNG at 2×</button>
+          <button type="button" data-cmd="exportJpg">Export JPG</button>
+          <button type="button" data-cmd="exportSvg">Export SVG</button>
+          <hr>
+          <button type="button" data-cmd="addImage">Add image…</button>
+          <button type="button" data-cmd="loadIcons">Load icon folder…</button>
+        </div>
+      </div>
+      <div class="menu">
+        <button type="button" class="menu-btn">Edit</button>
+        <div class="menu-list">
+          <button type="button" data-cmd="undo" data-needs="undo">Undo<kbd>Ctrl+Z</kbd></button>
+          <button type="button" data-cmd="redo" data-needs="redo">Redo<kbd>Ctrl+Y</kbd></button>
+          <hr>
+          <button type="button" data-cmd="cut" data-needs="sel">Cut<kbd>Ctrl+X</kbd></button>
+          <button type="button" data-cmd="copy" data-needs="sel">Copy<kbd>Ctrl+C</kbd></button>
+          <button type="button" data-cmd="paste" data-needs="clip">Paste<kbd>Ctrl+V</kbd></button>
+          <button type="button" data-cmd="duplicate" data-needs="sel">Duplicate<kbd>Ctrl+D</kbd></button>
+          <button type="button" data-cmd="delete" data-needs="sel">Delete<kbd>Del</kbd></button>
+          <hr>
+          <button type="button" data-cmd="editText" data-needs="one">Edit text<kbd>Enter</kbd></button>
+          <button type="button" data-cmd="selectAll">Select all<kbd>Ctrl+A</kbd></button>
+        </div>
+      </div>
+      <div class="menu">
+        <button type="button" class="menu-btn">View</button>
+        <div class="menu-list">
+          <button type="button" data-cmd="toggleGrid" data-check="grid">Show grid<kbd>Ctrl+'</kbd></button>
+          <button type="button" data-cmd="toggleSnapGrid" data-check="snapGrid">Snap to grid</button>
+          <button type="button" data-cmd="toggleSnapObjects" data-check="snapObjects">Snap to objects</button>
+          <hr>
+          <button type="button" data-cmd="zoomIn">Zoom in<kbd>Ctrl++</kbd></button>
+          <button type="button" data-cmd="zoomOut">Zoom out<kbd>Ctrl+-</kbd></button>
+          <button type="button" data-cmd="zoomReset">Actual size<kbd>Ctrl+0</kbd></button>
+          <button type="button" data-cmd="zoomFit">Fit page<kbd>Shift+1</kbd></button>
+        </div>
+      </div>
+      <div class="menu">
+        <button type="button" class="menu-btn">Arrange</button>
+        <div class="menu-list">
+          <button type="button" data-cmd="front" data-needs="sel">Bring to front<kbd>Ctrl+Shift+]</kbd></button>
+          <button type="button" data-cmd="forward" data-needs="sel">Bring forward<kbd>Ctrl+]</kbd></button>
+          <button type="button" data-cmd="backward" data-needs="sel">Send backward<kbd>Ctrl+[</kbd></button>
+          <button type="button" data-cmd="back" data-needs="sel">Send to back<kbd>Ctrl+Shift+[</kbd></button>
+          <hr>
+          <button type="button" data-cmd="alignLeft" data-needs="two">Align left</button>
+          <button type="button" data-cmd="alignCenter" data-needs="two">Align centers</button>
+          <button type="button" data-cmd="alignRight" data-needs="two">Align right</button>
+          <button type="button" data-cmd="alignTop" data-needs="two">Align top</button>
+          <button type="button" data-cmd="alignMiddle" data-needs="two">Align middles</button>
+          <button type="button" data-cmd="alignBottom" data-needs="two">Align bottom</button>
+          <hr>
+          <button type="button" data-cmd="distributeH" data-needs="three">Distribute horizontally</button>
+          <button type="button" data-cmd="distributeV" data-needs="three">Distribute vertically</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="toolbar" role="toolbar" aria-label="Quick actions">
+      <button type="button" class="tb" data-cmd="undo" data-needs="undo" title="Undo (Ctrl+Z)" aria-label="Undo">
+        <svg viewBox="0 0 18 18"><path d="M6.5 4.5L3 8l3.5 3.5"/><path d="M3.5 8H11a4 4 0 0 1 0 8H8.5"/></svg>
+      </button>
+      <button type="button" class="tb" data-cmd="redo" data-needs="redo" title="Redo (Ctrl+Y)" aria-label="Redo">
+        <svg viewBox="0 0 18 18"><path d="M11.5 4.5L15 8l-3.5 3.5"/><path d="M14.5 8H7a4 4 0 0 0 0 8h2.5"/></svg>
+      </button>
+      <span class="sep"></span>
+      <button type="button" class="tb" data-cmd="toggleGrid" data-check="grid" title="Show grid" aria-label="Show grid">
+        <svg viewBox="0 0 18 18"><rect x="2.5" y="2.5" width="13" height="13" rx="1.5"/><path d="M2.5 6.8h13M2.5 11.2h13M6.8 2.5v13M11.2 2.5v13"/></svg>
+      </button>
+      <button type="button" class="tb" data-cmd="toggleSnapGrid" data-check="snapGrid" title="Snap to grid" aria-label="Snap to grid">
+        <svg viewBox="0 0 18 18"><path d="M4 2.5h3.5V9a1.5 1.5 0 0 0 3 0V2.5H14V9a5 5 0 0 1-10 0z"/><path d="M4 5.5h3.5M10.5 5.5H14"/></svg>
+      </button>
+      <button type="button" class="tb" data-cmd="toggleSnapObjects" data-check="snapObjects" title="Snap to objects" aria-label="Snap to objects">
+        <svg viewBox="0 0 18 18"><rect x="2.5" y="3" width="6" height="5" rx="1"/><rect x="9.5" y="10" width="6" height="5" rx="1"/><path d="M9 1.5v15" stroke-dasharray="2 2"/></svg>
+      </button>
+      <span class="sep"></span>
+      <button type="button" class="tb" data-cmd="zoomOut" title="Zoom out (Ctrl+-)" aria-label="Zoom out">
+        <svg viewBox="0 0 18 18"><circle cx="8" cy="8" r="5"/><path d="M12 12l3.5 3.5M5.8 8h4.4"/></svg>
+      </button>
+      <button type="button" class="zoom-label" id="zoomLabel" data-cmd="zoomReset" title="Actual size (Ctrl+0)">100%</button>
+      <button type="button" class="tb" data-cmd="zoomIn" title="Zoom in (Ctrl++)" aria-label="Zoom in">
+        <svg viewBox="0 0 18 18"><circle cx="8" cy="8" r="5"/><path d="M12 12l3.5 3.5M5.8 8h4.4M8 5.8v4.4"/></svg>
+      </button>
+      <button type="button" class="tb" data-cmd="zoomFit" title="Fit page (Shift+1)" aria-label="Fit page">
+        <svg viewBox="0 0 18 18"><path d="M2.5 6.5v-4h4M11.5 2.5h4v4M15.5 11.5v4h-4M6.5 15.5h-4v-4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+    <aside class="sidebar left" id="palette" aria-label="Elements"></aside>
+    <section class="workspace" id="workspace" aria-label="Canvas">
+      <div class="stage" id="stage">
+        <svg id="svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+          <defs id="defs"></defs>
+          <g id="page"></g>
+          <g id="elements"></g>
+          <g id="overlay"></g>
+        </svg>
+      </div>
+    </section>
+    <aside class="sidebar right" id="props" aria-label="Properties"></aside>
+  </main>
+
+  <input type="file" id="fileOpen" accept=".json,application/json" hidden>
+  <input type="file" id="fileImage" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" multiple hidden>
+  <input type="file" id="fileIconDir" webkitdirectory multiple hidden>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/icon-library.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/shapes.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/editor.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
