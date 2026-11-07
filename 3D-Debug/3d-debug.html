@@ -776,16 +776,29 @@ function clearModel() {
   for (const mesh of model.meshes) {
     const h = mesh.userData.nh;
     if (h) { helpers.remove(h); h.geometry.dispose(); h.material.dispose(); }
-    mesh.geometry.dispose();
   }
   scene.remove(model.root);
   for (const m of matCache.values()) m.dispose();
   matCache.clear();
+  // everything the file brought: every object's geometry, skeletons' bone textures, and the original
+  // materials (meshes wear debug materials now; lines, points and skipped meshes still wear their own)
+  const mats = new Set(model.origMats), debugged = new Set(model.meshes);
+  model.root.traverse(o => {
+    o.geometry?.dispose();
+    o.skeleton?.dispose();
+    if (o.material && !debugged.has(o)) for (const m of [o.material].flat()) mats.add(m);
+  });
   const texs = new Set();
-  for (const mat of model.origMats) for (const v of Object.values(mat)) if (v?.isTexture) texs.add(v);
+  for (const mat of mats) for (const v of Object.values(mat)) if (v?.isTexture) texs.add(v);
   for (const e of model.entries) for (const k of SLOT_KEYS) if (e.slots[k].tex) texs.add(e.slots[k].tex);
-  for (const t of texs) { t.dispose(); dispCache.get(t)?.dispose(); }
-  for (const mat of model.origMats) mat.dispose();
+  for (const t of texs) {
+    t.dispose(); dispCache.get(t)?.dispose();
+    if (typeof ImageBitmap !== 'undefined' && t.image instanceof ImageBitmap) t.image.close();   // glTF images: free now, not at GC
+  }
+  for (const mat of mats) mat.dispose();
+  for (const m of Object.values(uvBgMats)) { m.map = null; m.needsUpdate = true; }   // don't pin the old model's images
+  slotCb = null;
+  toFree.clear();
   for (const u of model.blobs) URL.revokeObjectURL(u);
   for (const g of uvCache.values()) g?.dispose();
   uvCache.clear();
@@ -857,7 +870,7 @@ async function assignImages(files, onlyEmpty) {
     for (const [e, k] of targets) {
       const cs = k === 'base' ? 'srgb' : 'data';
       if (!(cs in tex)) tex[cs] = await loadImageTex(f, k);
-      if (tex[cs]) e.slots[k] = { tex: tex[cs], label: f.name, file: name };
+      if (tex[cs]) setSlot(e, k, { tex: tex[cs], label: f.name, file: name });
     }
     model.missing.delete(name);
     done.push(f.name);
@@ -870,13 +883,32 @@ async function setSlotFile(e, k, f) {
   if (!IMG_RE.test(f.name)) return toast('Use an image file (png, jpg, tga, webp).');
   const tex = await loadImageTex(f, k);
   if (!tex) return;
-  e.slots[k] = { tex, label: f.name, file: f.name.toLowerCase() };
+  setSlot(e, k, { tex, label: f.name, file: f.name.toLowerCase() });
   model.missing.delete(f.name.toLowerCase());
   refreshTextures();
 }
 function refreshTextures() {
   if (!uvBgTouched && !$('#uvBg').value && model.entries.some(e => e.slots.base.tex)) $('#uvBg').value = 'base';
-  renderMaterials(); applyMaterials(); updateNote(); scheduleUV();
+  renderMaterials(); applyMaterials(); freeReplaced(); updateNote(); scheduleUV();
+}
+
+// A texture replaced or cleared in a slot is freed once no slot of any material still uses it
+// (packed ORM maps and name-matched files are shared between slots and materials).
+const toFree = new Set();
+function setSlot(e, k, slot) {
+  const old = e.slots[k].tex;
+  if (old && old !== slot.tex) toFree.add(old);
+  e.slots[k] = slot;
+}
+function freeReplaced() {   // runs after applyMaterials(), so no debug material still points at them
+  for (const t of toFree) {
+    if (model?.entries.some(e => SLOT_KEYS.some(k => e.slots[k].tex === t))) continue;
+    const shown = dispCache.get(t);
+    for (const m of Object.values(uvBgMats)) if (m.map === t || (shown && m.map === shown)) { m.map = null; m.needsUpdate = true; }
+    shown?.dispose(); dispCache.delete(t);
+    t.dispose();
+  }
+  toFree.clear();
 }
 
 // ---------------------------------------------------------------- framing / helpers
@@ -1059,7 +1091,7 @@ function renderStats() {
 
 const slotInput = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,.tga' });
 let slotCb = null;
-slotInput.onchange = () => { const f = slotInput.files[0]; slotInput.value = ''; if (f && slotCb) slotCb(f); };
+slotInput.onchange = () => { const f = slotInput.files[0], cb = slotCb; slotInput.value = ''; slotCb = null; if (f && cb) cb(f); };
 
 function renderMaterials() {
   const list = $('#matList');
@@ -1098,7 +1130,7 @@ function makeSlot(e, k) {
     el.querySelector('.th').append(cv);
   }
   el.addEventListener('click', ev => {
-    if (ev.target.closest('.x')) { e.slots[k] = { tex: null }; return refreshTextures(); }
+    if (ev.target.closest('.x')) { setSlot(e, k, { tex: null }); return refreshTextures(); }
     slotCb = f => setSlotFile(e, k, f);
     slotInput.click();
   });
