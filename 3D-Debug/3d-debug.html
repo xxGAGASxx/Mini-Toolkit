@@ -144,8 +144,8 @@ addEventListener('drop', function (e) {
 <main id="view">
   <div id="empty"><div class="card">
     <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4cc2ff" stroke-width="1.4" stroke-linejoin="round"><path d="M12 2.5 20.5 7v10L12 21.5 3.5 17V7z"/><path d="M3.5 7 12 11.5 20.5 7M12 11.5v10" opacity=".6"/></svg>
-    <h3>Drop an FBX or OBJ here</h3>
-    <p>Add textures and the .mtl in the same drop — or drop the whole folder. Files never leave your browser.</p>
+    <h3>Drop an FBX or glTF / GLB here</h3>
+    <p>Add textures (and the .bin of a .gltf) in the same drop — or drop the whole folder. Files never leave your browser.</p>
     <button class="btn primary" id="browseBtn">Browse files</button>
   </div></div>
   <div id="drop">Drop to load</div>
@@ -154,7 +154,7 @@ addEventListener('drop', function (e) {
       <b>UV</b>
       <select id="uvMesh" title="Meshes to show"></select>
       <select id="uvBg" title="Texture behind the UVs">
-        <option value="">No texture</option><option value="base">Base color</option><option value="normal">Normal</option><option value="rough">Roughness</option>
+        <option value="">No texture</option><option value="base">Base color</option><option value="normal">Normal</option><option value="rough">Roughness</option><option value="metal">Metalness</option><option value="ao">Occlusion</option>
       </select>
       <button class="icon-btn" id="uvClose" title="Close (U)">×</button>
     </div>
@@ -201,6 +201,8 @@ addEventListener('drop', function (e) {
       <button data-v="base">Base color</button>
       <button data-v="normal">Normal map</button>
       <button data-v="rough">Roughness</button>
+      <button data-v="metal">Metalness</button>
+      <button data-v="ao">Occlusion (AO)</button>
       <button data-v="checker">UV checker</button>
       <button data-v="uv">UV coords</button>
       <button data-v="vcolor">Vertex colors</button>
@@ -224,7 +226,7 @@ addEventListener('drop', function (e) {
 
   <section>
     <h2>Materials &amp; textures</h2>
-    <p class="note" style="margin-top:0">Click or drop an image on a slot. Images dropped on the viewport are matched by name (…_basecolor / _normal / _roughness).</p>
+    <p class="note" style="margin-top:0">Click or drop an image on a slot. Images dropped on the viewport are matched by name (…_basecolor / _normal / _roughness / _metallic / _ao, or a packed _orm).</p>
     <div id="matList"></div>
     <div id="missing"></div>
   </section>
@@ -239,23 +241,30 @@ addEventListener('drop', function (e) {
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
-import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TGALoader } from 'three/addons/loaders/TGALoader.js';
 import { VertexNormalsHelper } from 'three/addons/helpers/VertexNormalsHelper.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const $ = s => document.querySelector(s);
 const IMG_RE = /\.(png|jpe?g|webp|bmp|gif|tga)$/i;
-const MODEL_RE = /\.(fbx|obj)$/i;
-const SLOT_KEYS = ['base', 'normal', 'rough'];
-const SLOT_NAMES = { base: 'Base', normal: 'Normal', rough: 'Rough' };
+const MODEL_RE = /\.(fbx|glb|gltf)$/i;
+// glTF compression needs external decoders, which this tool doesn't load
+const COMPRESSED = { KHR_draco_mesh_compression: 'Draco', EXT_meshopt_compression: 'Meshopt', KHR_meshopt_compression: 'Meshopt', KHR_texture_basisu: 'KTX2' };
+const SLOT_KEYS = ['base', 'normal', 'rough', 'metal', 'ao'];
+const SLOT_NAMES = { base: 'Base', normal: 'Normal', rough: 'Rough', metal: 'Metal', ao: 'AO' };
+// the channel three.js samples from each data map — so packed occlusion / roughness / metalness (ORM) maps work as-is
+const SLOT_CH = { ao: 'r', rough: 'g', metal: 'b' };
+// packed maps recognised by file name, and the slots they fill
+const PACKED = { orm: ['ao', 'rough', 'metal'], rm: ['rough', 'metal'] };
 const UV_NAMES = { uv: 'UV0', uv1: 'UV1', uv2: 'UV2', uv3: 'UV3' };
 const UV_CH = { uv: 0, uv1: 1, uv2: 2, uv3: 3 };
 const MISSING = '\u0000missing:';
 const fmt = n => n.toLocaleString('en-US');
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const baseName = p => { try { p = decodeURIComponent(p); } catch {} return p.split(/[\\/]/).pop().toLowerCase(); };
+// file name a loaded texture came from: keyed by image URL (FBX) or by the image itself (glTF)
+const srcOf = (t, srcName) => t?.image ? srcName.get(t.image) ?? (t.image.src ? srcName.get(t.image.src) : undefined) : undefined;
 const PLACEHOLDER = await new Promise(r => { const c = document.createElement('canvas'); c.width = c.height = 2; c.toBlob(r, 'image/png'); });
 
 // ---------------------------------------------------------------- state
@@ -433,7 +442,7 @@ function texSource(tex) {
     c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
     const g = c.getContext('2d'), id = g.createImageData(img.width, img.height);
     id.data.set(img.data); g.putImageData(id, 0, 0);
-    if (!tex.flipY) { const f = document.createElement('canvas'); f.width = c.width; f.height = c.height; const fg = f.getContext('2d'); fg.scale(1, -1); fg.drawImage(c, 0, -c.height); c = f; }
+    if (tex.flipY !== !model?.gltf) { const f = document.createElement('canvas'); f.width = c.width; f.height = c.height; const fg = f.getContext('2d'); fg.scale(1, -1); fg.drawImage(c, 0, -c.height); c = f; }
   }
   srcCache.set(tex, c);
   return c;
@@ -441,29 +450,34 @@ function texSource(tex) {
 const hasImage = t => !!t?.image && (t.image.data ? !!t.image.data : t.image.width > 0);
 
 // ---------------------------------------------------------------- materials
-function patchShader(m, worldNormals, backfaces) {
-  if (!worldNormals && !backfaces) return;
+function patchShader(m, worldNormals, backfaces, chan) {
+  if (!worldNormals && !backfaces && !chan) return;
   m.onBeforeCompile = sh => {
+    // data maps: show only the channel the shader samples (see SLOT_CH) as grey
+    if (chan) sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>',
+      `#include <map_fragment>\n\tdiffuseColor.rgb = vec3( diffuseColor.${chan} );`);
     if (worldNormals) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>',
       '#include <normal_fragment_maps>\n\tnormal = normalize( ( vec4( normal, 0.0 ) * viewMatrix ).xyz );');
     if (backfaces) sh.fragmentShader = sh.fragmentShader.replace(/}\s*$/,
       '\tif ( ! gl_FrontFacing ) gl_FragColor = vec4( 0.95, 0.12, 0.2, 1.0 );\n}');
   };
-  m.customProgramCacheKey = () => `dbg${+worldNormals}${+backfaces}`;
+  m.customProgramCacheKey = () => `dbg${+worldNormals}${+backfaces}${chan || ''}`;
 }
 
 function buildMat(e, hasColor) {
   const { mode, channel: ch } = state;
   const lit = mode === 'shaded';
-  const { base: { tex: base }, normal: { tex: nrm }, rough: { tex: rgh } } = e.slots;
+  const { base: { tex: base }, normal: { tex: nrm }, rough: { tex: rgh }, metal: { tex: mtl }, ao: { tex: ao } } = e.slots;
   const B = p => new THREE.MeshBasicMaterial({ toneMapped: false, ...p });
   const L = p => new THREE.MeshStandardMaterial({ metalness: 0, roughness: 0.6, ...p });
+  const grey = v => new THREE.Color().setRGB(v, v, v, THREE.SRGBColorSpace);
   let m;
   switch (ch) {
     case 'material':
       if (mode === 'wire') m = B({ color: 0xb9c6d8 });
       else if (!lit) m = B({ color: e.color, map: base });
-      else m = L({ color: e.color, map: base, normalMap: nrm, roughnessMap: rgh, roughness: rgh ? 1 : e.roughness });
+      else m = L({ color: e.color, map: base, normalMap: nrm, roughnessMap: rgh, roughness: rgh ? e.roughMul : e.roughness,
+                   metalnessMap: mtl, metalness: mtl ? e.metalMul : e.metalness, aoMap: ao, aoMapIntensity: e.aoIntensity });
       if (mode !== 'wire') { m.transparent = e.transparent; m.opacity = e.opacity; m.alphaTest = e.alphaTest; }
       break;
     case 'base': {
@@ -475,8 +489,16 @@ function buildMat(e, hasColor) {
               : B(nrm ? { map: displayTex(nrm) } : { color: 0x8080ff });
       break;
     case 'rough':
-      m = lit ? L({ color: 0xb8b8b8, metalness: 1, roughnessMap: rgh, roughness: rgh ? 1 : e.roughness })
-              : B(rgh ? { map: displayTex(rgh) } : { color: new THREE.Color().setRGB(e.roughness, e.roughness, e.roughness, THREE.SRGBColorSpace) });
+      m = lit ? L({ color: 0xb8b8b8, metalness: 1, roughnessMap: rgh, roughness: rgh ? e.roughMul : e.roughness })
+              : B(rgh ? { map: displayTex(rgh) } : { color: grey(e.roughness) });
+      break;
+    case 'metal':
+      m = lit ? L({ color: 0xc4c4c4, roughness: 0.25, metalnessMap: mtl, metalness: mtl ? e.metalMul : e.metalness })
+              : B(mtl ? { map: displayTex(mtl) } : { color: grey(e.metalness) });
+      break;
+    case 'ao':
+      m = lit ? L({ color: 0xd8d8d8, roughness: 0.9, aoMap: ao, aoMapIntensity: e.aoIntensity })
+              : B(ao ? { map: displayTex(ao) } : { color: 0xffffff });
       break;
     case 'checker': m = lit ? L({ map: checkerTex, roughness: 0.7 }) : B({ map: checkerTex }); break;
     case 'uv': m = B({ map: uvGradTex }); break;
@@ -486,8 +508,8 @@ function buildMat(e, hasColor) {
   if (mode === 'wire') m.wireframe = true;
   m.side = state.back ? THREE.DoubleSide : THREE.FrontSide;
   m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
-  if (m.normalScale) m.normalScale.set(1, state.flipY ? -1 : 1);
-  patchShader(m, ch === 'normals', state.back);
+  if (m.normalScale) m.normalScale.set(e.normalScale.x, e.normalScale.y * (state.flipY ? -1 : 1));
+  patchShader(m, ch === 'normals', state.back, !lit && e.slots[ch]?.tex ? SLOT_CH[ch] : null);
   return m;
 }
 
@@ -497,6 +519,8 @@ function applyMaterials() {
   for (const m of matCache.values()) m.dispose();
   matCache.clear();
   checkerTex.channel = uvGradTex.channel = UV_CH[state.uvSet] ?? 0;
+  // glTF puts the UV origin at the image's top-left; flip the checker so its letters still read correctly
+  if (checkerTex.flipY !== !model.gltf) { checkerTex.flipY = !model.gltf; checkerTex.needsUpdate = true; }
   for (const mesh of model.meshes) {
     const hasColor = !!mesh.geometry.attributes.color;
     const mats = mesh.userData.entries.map(e => {
@@ -534,7 +558,7 @@ function meshStats(g) {
 }
 
 // ---------------------------------------------------------------- loading
-const openInput = Object.assign(document.createElement('input'), { type: 'file', multiple: true, accept: '.fbx,.obj,.mtl,.png,.jpg,.jpeg,.tga,.webp,.bmp,.gif' });
+const openInput = Object.assign(document.createElement('input'), { type: 'file', multiple: true, accept: '.fbx,.glb,.gltf,.bin,.png,.jpg,.jpeg,.tga,.webp,.bmp,.gif' });
 openInput.onchange = () => { const f = Array.from(openInput.files); openInput.value = ''; handleFiles(f); };
 $('#openBtn').onclick = $('#browseBtn').onclick = () => openInput.click();
 
@@ -546,16 +570,25 @@ async function handleFiles(files) {
     if (models.length > 1) toast(`Loading ${models[0].name} — one model at a time.`);
     return loadModel(models[0], files);
   }
+  const other = files.find(f => /\.(obj|dae|stl|ply|3ds|usdz?|blend)$/i.test(f.name));
+  if (other) return toast(`${other.name}: this format isn't supported. Drop an FBX or glTF / GLB.`);
   const imgs = files.filter(f => IMG_RE.test(f.name));
   if (imgs.length) {
-    if (!model) return toast('Load an FBX or OBJ first, then drop textures.');
+    if (!model) return toast('Load a model first, then drop textures.');
     const { done, skipped } = await assignImages(imgs, false);
     const parts = [];
     if (done.length) parts.push(`Assigned ${done.join(', ')}`);
     if (skipped.length) parts.push(`Couldn't tell the type of ${skipped.join(', ')} — drop it on a slot`);
     return toast(parts.join('. ') || 'Nothing assigned.');
   }
-  toast('Unsupported file. Drop .fbx or .obj (plus textures / .mtl).');
+  toast('Unsupported file. Drop .fbx, .glb or .gltf (plus textures / .bin).');
+}
+
+// the JSON part of a .gltf, or of a .glb (first chunk after the 12-byte header)
+function gltfJson(buf) {
+  const dv = new DataView(buf);
+  const glb = dv.byteLength >= 20 && dv.getUint32(0, true) === 0x46546C67;   // 'glTF'
+  return JSON.parse(new TextDecoder().decode(glb ? new Uint8Array(buf, 20, dv.getUint32(12, true)) : buf));
 }
 
 async function loadModel(file, files) {
@@ -563,7 +596,8 @@ async function loadModel(file, files) {
   setLoading(`Loading ${file.name}…`);
   await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
   clearModel();
-  const blobs = [], fileMap = new Map(), srcName = new Map(), missing = new Set();
+  const blobs = [], fileMap = new Map(), srcName = new Map(), missing = new Set(), requested = new Set();
+  const isGltf = /\.(glb|gltf)$/i.test(file.name);
   for (const f of files) {
     if (MODEL_RE.test(f.name)) continue;
     const u = URL.createObjectURL(f);
@@ -574,6 +608,7 @@ async function loadModel(file, files) {
   manager.setURLModifier(url => {
     if (/^(blob|data):/i.test(url)) return url;
     const b = baseName(url);
+    requested.add(b);
     if (fileMap.has(b)) return fileMap.get(b);
     missing.add(b);
     const u = URL.createObjectURL(PLACEHOLDER);
@@ -590,17 +625,33 @@ async function loadModel(file, files) {
     let root;
     if (/\.fbx$/i.test(file.name)) {
       root = new FBXLoader(manager).parse(buf, '');
-    } else {
-      const text = new TextDecoder().decode(buf);
-      const loader = new OBJLoader(manager);
-      for (const m of text.matchAll(/^mtllib\s+(.+?)\s*$/gm)) {
-        const f = files.find(x => x.name.toLowerCase() === baseName(m[1]));
-        if (!f) { missing.add(baseName(m[1])); continue; }
-        const mc = new MTLLoader(manager).parse(await f.text(), '');
-        mc.preload();
-        loader.setMaterials(mc);
+    } else {   // .glb / .gltf
+      const json = gltfJson(buf);
+      // Draco is refused whenever it's listed; Meshopt / KTX2 only when there's no plain fallback
+      const comp = [...new Set([...(json.extensionsRequired || []), ...(json.extensionsUsed || []).filter(x => x === 'KHR_draco_mesh_compression')]
+        .filter(x => COMPRESSED[x]).map(x => COMPRESSED[x]))];
+      if (comp.length) throw new Error(`it uses ${comp.join(' + ')} compression, which isn't supported — export it uncompressed`);
+      // geometry may live in .bin files — fail clearly if one wasn't dropped
+      const lost = (json.buffers || []).map(b => b.uri).filter(u => u && !/^data:/i.test(u) && !fileMap.has(baseName(u))).map(baseName);
+      if (lost.length) throw new Error(`missing ${lost.join(', ')} — drop it together with the .gltf`);
+      const gltf = await new Promise((res, rej) => new GLTFLoader(manager).parse(buf, '', res, rej));
+      root = gltf.scene || gltf.scenes?.[0];
+      if (!root) throw new Error('No scene in this file.');
+      // glTF lights (KHR_lights_punctual) are in physical units and would wash out the debug lighting
+      const lights = [];
+      root.traverse(o => { if (o.isLight) lights.push(o); });
+      for (const l of lights) l.removeFromParent();
+      bakeQuantizedUVs(root);
+      // glTF textures are ImageBitmaps with no URL — map each image back to its file via the JSON
+      for (const [t, ref] of gltf.parser.associations) {
+        if (!t.isTexture || ref?.textures === undefined || !t.image) continue;
+        const td = json.textures?.[ref.textures] || {};
+        const si = Object.values(td.extensions || {}).find(x => x?.source !== undefined)?.source ?? td.source;
+        const uri = json.images?.[si]?.uri;
+        if (!uri || /^data:/i.test(uri)) continue;
+        const b = baseName(uri);
+        srcName.set(t.image, fileMap.has(b) ? srcName.get(fileMap.get(b)) : MISSING + b);
       }
-      root = loader.parse(text);
     }
     setLoading('Loading textures…');
     await new Promise(r => { if (pending <= 0) r(); else { idle = r; setTimeout(r, 30000); } });
@@ -608,13 +659,15 @@ async function loadModel(file, files) {
     await new Promise(r => requestAnimationFrame(r));
     const m = buildModel(root, file.name, missing, srcName, blobs);
     if (!m.meshes.length) throw new Error('No meshes found in this file.');
+    m.gltf = isGltf;      // glTF: UV origin at the image's top-left, roughness packed in G
     model = m;
     scene.add(root);
     root.rotation.x = state.zUp ? -Math.PI / 2 : 0;
     updateBounds();
     // dropped images the file didn't reference → assign by name to empty slots
+    // (glTF: skip every image it references, e.g. its emissive / occlusion maps, which have no slot here)
     const used = new Set(m.entries.flatMap(e => SLOT_KEYS.map(k => e.slots[k].file)).filter(Boolean));
-    const extra = files.filter(f => IMG_RE.test(f.name) && !used.has(f.name.toLowerCase()));
+    const extra = files.filter(f => IMG_RE.test(f.name) && !used.has(f.name.toLowerCase()) && !(isGltf && requested.has(f.name.toLowerCase())));
     if (extra.length) await assignImages(extra, true);
     $('#empty').hidden = true;
     $('#fileName').textContent = file.name;
@@ -636,6 +689,30 @@ async function loadModel(file, files) {
     setLoading(null);
     busy = false;
   }
+}
+
+// Quantized UVs (KHR_mesh_quantization) are integers that only mean something through the material's
+// KHR_texture_transform. Bake that transform into float UVs so the UV panel, checker and UV views show
+// real 0–1 coordinates. Float UVs are left alone (their transform is deliberate tiling).
+function bakeQuantizedUVs(root) {
+  const identity = new THREE.Matrix3();
+  root.traverse(o => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const [name, ch] of Object.entries(UV_CH)) {
+      const a = o.geometry.attributes[name];
+      if (!a || (a.isInterleavedBufferAttribute ? a.data.array : a.array) instanceof Float32Array) continue;
+      const texs = [...new Set(mats.flatMap(m => Object.values(m)).filter(t => t?.isTexture && t.channel === ch))];
+      if (!texs.length) continue;
+      for (const t of texs) t.updateMatrix();
+      const M = texs[0].matrix.clone();
+      if (M.equals(identity) || !texs.every(t => t.matrix.equals(M))) continue;
+      const out = new Float32Array(a.count * 2), v = new THREE.Vector2();
+      for (let i = 0; i < a.count; i++) { v.set(a.getX(i), a.getY(i)).applyMatrix3(M); out[i * 2] = v.x; out[i * 2 + 1] = v.y; }
+      o.geometry.setAttribute(name, new THREE.BufferAttribute(out, 2));
+      for (const t of texs) { t.offset.set(0, 0); t.repeat.set(1, 1); t.rotation = 0; t.updateMatrix(); }
+    }
+  });
 }
 
 function buildModel(root, name, missing, srcName, blobs) {
@@ -665,15 +742,15 @@ function buildModel(root, name, missing, srcName, blobs) {
 
 function slotFrom(tex, srcName) {
   if (!tex) return { tex: null };
-  const n = tex.image?.src ? srcName.get(tex.image.src) : undefined;
+  const n = srcOf(tex, srcName);
   if (n?.startsWith(MISSING)) return { tex: null, missing: n.slice(MISSING.length) };
   if (!hasImage(tex)) return { tex: null, missing: tex.name || 'unreadable texture' };
   tex.anisotropy = maxAniso;
   return { tex, label: n || tex.name || 'embedded', file: n?.toLowerCase() };
 }
 function makeEntry(mat, i, srcName) {
-  // normal maps often arrive in the bump slot (Blender OBJ map_Bump, Max/Maya FBX "Bump")
-  const texName = t => (t?.image?.src && srcName.get(t.image.src)?.replace(MISSING, '')) || t?.name || '';
+  // normal maps often arrive in the bump slot (Max / Maya FBX "Bump")
+  const texName = t => srcOf(t, srcName)?.replace(MISSING, '') || t?.name || '';
   const nrm = mat.normalMap || (mat.bumpMap && classify(texName(mat.bumpMap)) === 'normal' ? mat.bumpMap : null);
   return {
     id: i,
@@ -681,7 +758,15 @@ function makeEntry(mat, i, srcName) {
     color: mat.color ? mat.color.clone() : new THREE.Color(1, 1, 1),
     opacity: mat.opacity ?? 1, transparent: !!mat.transparent, alphaTest: mat.alphaTest || 0,
     roughness: mat.roughness ?? 0.6,
-    slots: { base: slotFrom(mat.map, srcName), normal: slotFrom(nrm, srcName), rough: slotFrom(mat.roughnessMap, srcName) },
+    roughMul: mat.isMeshStandardMaterial ? mat.roughness : 1,   // glTF: roughness = factor × map
+    metalness: mat.metalness ?? 0,
+    metalMul: mat.isMeshStandardMaterial ? mat.metalness : 1,   // glTF: metalness = factor × map
+    aoIntensity: mat.aoMapIntensity ?? 1,                       // glTF occlusion strength
+    // glTF flips Y when the mesh has no tangents (its UVs run top-down); FBX stays (1, 1)
+    normalScale: mat.normalScale ? mat.normalScale.clone() : new THREE.Vector2(1, 1),
+    // FBX: AO from Maya's TEX_ao_map; its metal / roughness links are skipped by FBXLoader → matched by file name
+    slots: { base: slotFrom(mat.map, srcName), normal: slotFrom(nrm, srcName), rough: slotFrom(mat.roughnessMap, srcName),
+             metal: slotFrom(mat.metalnessMap, srcName), ao: slotFrom(mat.aoMap, srcName) },
     meshes: [],
   };
 }
@@ -709,16 +794,24 @@ function clearModel() {
 }
 
 // ---------------------------------------------------------------- texture assignment
+// file name → slot kind, or a PACKED kind: 'orm' (occlusion / roughness / metalness in R / G / B, as glTF and
+// Unreal pack them) or 'rm' (glTF metallicRoughness: G / B). Ambiguous packings (arm, mra, rma…) are left alone.
 function classify(fname) {
   const n = fname.toLowerCase().replace(/\.[^.]+$/, '');
   const t = n.split(/[^a-z0-9]+/);
   const has = (...w) => w.some(x => t.includes(x));
   const inc = (...w) => w.some(x => n.includes(x));
+  const late = (...w) => w.some(x => t.indexOf(x, 1) > 0);   // a map word after the asset name ("rock_metal", not "metal_plate")
+  if (inc('occlusionroughnessmetal') || has('orm')) return 'orm';
+  if (inc('metallicroughness', 'metalroughness', 'roughnessmetal')) return 'rm';
   if (inc('normal') || has('n', 'nrm', 'nor', 'norm', 'nml', 'nm')) return 'normal';
   if (inc('rough') || has('r', 'rgh')) return 'rough';
   if (inc('basecolor', 'base_color', 'albedo', 'diffuse') || has('d', 'diff', 'col', 'color', 'colour', 'base', 'bc', 'alb')) return 'base';
-  if (inc('metal', 'occlusion', 'height', 'displace', 'emiss', 'opacity', 'gloss', 'smooth', 'specular', 'mask', 'bump', 'cavity', 'curvature')
-      || has('ao', 'orm', 'arm', 'mra', 'mrao', 'spec', 'e', 'm', 'h', 'a', 'o', 'alpha', 'disp', 'ms')) return null;
+  if (inc('occlusion') || has('ao', 'occ')) return 'ao';
+  if (inc('height', 'displace', 'emiss', 'opacity', 'gloss', 'smooth', 'specular', 'mask', 'bump', 'cavity', 'curvature')
+      || has('arm', 'mra', 'mrao', 'rma', 'rm', 'mr', 'spec', 'e', 'h', 'a', 'o', 'alpha', 'disp', 'ms')) return null;
+  if (late('metallic', 'metalness', 'metal', 'met', 'm')) return 'metal';   // after the skip list: "metal_plate_height" is a height map
+  if (inc('metal') || has('m')) return null;   // "MetalPanel", "M_Rock": a metal material or a prefix, not a metalness map
   return 'base';
 }
 const normName = s => s.toLowerCase().replace(/\.[^.]+$/, '').replace(/^(m|mat|mi|mtl|material|t|tex|texture)[_\-\s]/, '').replace(/[^a-z0-9]/g, '');
@@ -737,6 +830,7 @@ function loadImageTex(file, kind) {
   return new Promise(res => loader.load(url, t => {
     t.name = file.name;
     t.colorSpace = kind === 'base' ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    if (model.gltf) t.flipY = false;    // match glTF's top-left UV origin
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = maxAniso;
     t.needsUpdate = true;
@@ -755,13 +849,15 @@ async function assignImages(files, onlyEmpty) {
     if (!targets.length) {
       const kind = classify(f.name);
       if (!kind) { skipped.push(f.name); continue; }
-      targets = matchEntries(f.name).filter(e => !onlyEmpty || !e.slots[kind].tex).map(e => [e, kind]);
+      const keys = PACKED[kind] || [kind];
+      targets = matchEntries(f.name).flatMap(e => keys.filter(k => !onlyEmpty || !e.slots[k].tex).map(k => [e, k]));
     }
     if (!targets.length) continue;
-    const byKind = {};
+    const tex = {};   // one texture per colour space: base colour is sRGB, the other maps are linear data
     for (const [e, k] of targets) {
-      if (!(k in byKind)) byKind[k] = await loadImageTex(f, k);
-      if (byKind[k]) e.slots[k] = { tex: byKind[k], label: f.name, file: name };
+      const cs = k === 'base' ? 'srgb' : 'data';
+      if (!(cs in tex)) tex[cs] = await loadImageTex(f, k);
+      if (tex[cs]) e.slots[k] = { tex: tex[cs], label: f.name, file: name };
     }
     model.missing.delete(name);
     done.push(f.name);
@@ -909,10 +1005,12 @@ function updateNote() {
     const ms = model.meshes, ch = state.channel, uvn = UV_NAMES[state.uvSet], lit = state.mode === 'shaded';
     const lacking = a => ms.filter(m => !m.geometry.attributes[a]).length;
     const anySlot = k => model.entries.some(e => e.slots[k].tex);
-    if (ch === 'material') t = lit ? 'Base × color, normal and roughness maps, lit (PBR, metalness 0).' : state.mode === 'unlit' ? 'Base color × material color, no lighting.' : 'Plain wireframe. Pick another view to color the lines.';
+    if (ch === 'material') t = lit ? 'Base × color with normal, roughness, metalness and AO maps, lit (PBR).' : state.mode === 'unlit' ? 'Base color × material color, no lighting.' : 'Plain wireframe. Pick another view to color the lines.';
     else if (ch === 'base') t = anySlot('base') ? 'Base color texture only.' : 'No base color texture — showing material color.';
     else if (ch === 'normal') t = !anySlot('normal') ? 'No normal map assigned.' : lit ? 'Grey clay + normal map. Unlit (2) shows the raw texture.' : 'Raw normal map texels. Shaded (3) shows it lit on grey clay.';
-    else if (ch === 'rough') t = !anySlot('rough') ? 'No roughness map assigned — drop one on a slot below.' : lit ? 'Chrome + roughness map: blurry = rough, sharp = smooth.' : 'Raw roughness texels (white = rough).';
+    else if (ch === 'rough') t = !anySlot('rough') ? 'No roughness map assigned — drop one on a slot below.' : lit ? 'Chrome + roughness map: blurry = rough, sharp = smooth.' : 'Raw roughness texels — the green channel, which the shader reads (white = rough).';
+    else if (ch === 'metal') t = !anySlot('metal') ? 'No metalness map assigned — drop one on a slot below.' : lit ? 'Shiny clay + metalness map: mirror-like = metal, matte = non-metal.' : 'Raw metalness texels — the blue channel, which the shader reads (white = metal).';
+    else if (ch === 'ao') t = !anySlot('ao') ? 'No occlusion map assigned — drop one on a slot below.' : lit ? 'Clay + AO map. As in engines, AO only darkens ambient light.' : 'Raw AO texels — the red channel, which the shader reads (dark = occluded).';
     else if (ch === 'checker' || ch === 'uv') {
       const n = lacking(state.uvSet);
       t = ch === 'uv' ? `Red = U, Green = V on ${uvn} (wraps every 1.0). Always unlit.` : `A1 = bottom-left of ${uvn}. Mirrored letters = mirrored UVs.`;
@@ -990,7 +1088,13 @@ function makeSlot(e, k) {
   if (src) {
     const cv = document.createElement('canvas');
     cv.width = cv.height = 112;
-    cv.getContext('2d').drawImage(src, 0, 0, 112, 112);
+    const g = cv.getContext('2d');
+    g.drawImage(src, 0, 0, 112, 112);
+    if (SLOT_CH[k]) {   // data maps: only the channel the shader reads (packed ORM maps would look colourful)
+      const o = 'rgb'.indexOf(SLOT_CH[k]), id = g.getImageData(0, 0, 112, 112), d = id.data;
+      for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = d[i + o];
+      g.putImageData(id, 0, 0);
+    }
     el.querySelector('.th').append(cv);
   }
   el.addEventListener('click', ev => {
@@ -1069,7 +1173,16 @@ const uvR = new THREE.WebGLRenderer({ canvas: uvc, antialias: true });
 uvR.setPixelRatio(Math.min(devicePixelRatio, 2));
 uvR.setClearColor(0x0b0d10, 1);
 const uvScene = new THREE.Scene(), uvCam = new THREE.OrthographicCamera(0, 1, 1, 0, -10, 10);
-const uvBg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, -2), new THREE.MeshBasicMaterial({ toneMapped: false }));
+// DoubleSide: the camera is flipped for glTF (V runs down), which reverses the winding
+// one background material per displayed channel (data maps show only the channel the shader reads)
+const uvBgMats = {};
+const uvBgMat = chan => uvBgMats[chan || ''] ??= (() => {
+  const m = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
+  patchShader(m, false, false, chan);
+  return m;
+})();
+const uvBg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).translate(0.5, 0.5, -2), uvBgMat());
+const vSign = () => model?.gltf ? -1 : 1;   // +1: V up (FBX) · −1: V down, image upright (glTF)
 const uvGroup = new THREE.Group();
 const uvLineMat = new THREE.MeshBasicMaterial({ wireframe: true, toneMapped: false, transparent: true, opacity: 0.85, depthTest: false });
 const uvGrid = (() => {
@@ -1140,7 +1253,8 @@ function drawUV() {
   if (sz.x !== W || sz.y !== H) uvR.setSize(W, H, false);
   const ppu = ppuOf();
   uvCam.left = uvView.cx - W / 2 / ppu; uvCam.right = uvView.cx + W / 2 / ppu;
-  uvCam.bottom = uvView.cy - H / 2 / ppu; uvCam.top = uvView.cy + H / 2 / ppu;
+  const s = vSign();
+  uvCam.bottom = uvView.cy - s * H / 2 / ppu; uvCam.top = uvView.cy + s * H / 2 / ppu;
   uvCam.updateProjectionMatrix();
   const meshes = uvMeshes();
   // texture behind 0..1 — normal / roughness shown as raw texels
@@ -1148,6 +1262,7 @@ function drawUV() {
   uvBg.visible = !!bgTex;
   if (bgTex) {
     const t = bgKey === 'base' ? bgTex : displayTex(bgTex);
+    uvBg.material = uvBgMat(SLOT_CH[bgKey]);
     if (uvBg.material.map !== t) { uvBg.material.map = t; uvBg.material.needsUpdate = true; }
   }
   uvLineMat.color.set(bgTex ? 0xff9a3c : 0x4cc2ff);
@@ -1171,7 +1286,7 @@ uvc.addEventListener('pointermove', e => {
   if (!uvDrag) return;
   const ppu = ppuOf();
   uvView.cx -= (e.clientX - uvDrag.x) / ppu;
-  uvView.cy += (e.clientY - uvDrag.y) / ppu;
+  uvView.cy += vSign() * (e.clientY - uvDrag.y) / ppu;
   uvDrag = { x: e.clientX, y: e.clientY };
   scheduleUV();
 });
@@ -1181,10 +1296,10 @@ uvc.addEventListener('dblclick', fitUV);
 uvc.addEventListener('wheel', e => {
   e.preventDefault();
   const r = uvc.getBoundingClientRect(), mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2;
-  const p0 = ppuOf(), u = uvView.cx + mx / p0, v = uvView.cy - my / p0;
+  const s = vSign(), p0 = ppuOf(), u = uvView.cx + mx / p0, v = uvView.cy - s * my / p0;
   uvView.zoom = Math.min(Math.max(uvView.zoom * Math.exp(-e.deltaY * 0.0015), 1e-3), 1e4);
   const p1 = ppuOf();
-  uvView.cx = u - mx / p1; uvView.cy = v + my / p1;
+  uvView.cx = u - mx / p1; uvView.cy = v + s * my / p1;
   scheduleUV();
 }, { passive: false });
 new ResizeObserver(() => scheduleUV()).observe(uvc);
