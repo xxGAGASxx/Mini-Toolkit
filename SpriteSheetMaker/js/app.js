@@ -15,16 +15,29 @@ function setTab(t) {
 els.tabMain.addEventListener('click', () => setTab('main'));
 els.tabPrev.addEventListener('click', () => setTab('preview'));
 
+// Whether the focused control uses this key itself, in which case the shortcut leaves it alone.
+// Text and number fields keep every key (typing, Del, their own Ctrl+Z); other controls only
+// the keys they react to, so e.g. Del or Ctrl+D still work right after ticking a checkbox.
+function controlOwnsKey(el, e) {
+  if (!el || !el.matches) return false;
+  if (el.matches('textarea, input:not([type]), input[type=text], input[type=number], input[type=search]')) return true;
+  const k = e.key, nav = /^(Arrow|Page|Home$|End$)/.test(k), plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+  if (el.matches('input[type=range]')) return nav;
+  if (el.matches('select')) return nav || k === ' ' || k === 'Enter' || (k.length === 1 && plain);   // incl. type-to-pick
+  if (el.matches('input[type=checkbox], input[type=radio], input[type=color], button')) return k === ' ' || k === 'Enter';
+  return false;
+}
+
 document.addEventListener('keydown', (e) => {
   if (modalOpen()) return;   // the dialog handles its own keys (Esc closes it); nothing reaches the sheet behind
   const t = e.target, k = e.key.toLowerCase();
-  // Undo / redo work in both tabs, also with a slider focused. Number boxes keep their own text undo.
-  if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && !(t.closest && t.closest('input[type=number], textarea'))) {
+  if (controlOwnsKey(t, e)) return;
+  // Undo / redo work in both tabs (number boxes keep their own text undo, see above).
+  if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y')) {
     e.preventDefault();
     if (!drag) (k === 'y' || e.shiftKey ? redo : undo)();   // not mid-drag: the drop needs the order it started with
     return;
   }
-  if (t.closest && t.closest('input, select, textarea')) return;
   if (state.tab === 'main') {
     if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel != null) { e.preventDefault(); removeSel(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); }
@@ -34,7 +47,7 @@ document.addEventListener('keydown', (e) => {
   const s = cur(), step = e.shiftKey ? 10 : 1;
   const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
   if (moves[e.key] && s) { e.preventDefault(); s.ox += moves[e.key][0]; s.oy += moves[e.key][1]; schedule(); }
-  else if (e.key === ' ' && t.tagName !== 'BUTTON') { e.preventDefault(); state.playing ? pause() : play(); }
+  else if (e.key === ' ') { e.preventDefault(); state.playing ? pause() : play(); }
   else if (e.key === ',') { pause(); setFrame(state.frame - 1); }
   else if (e.key === '.') { pause(); setFrame(state.frame + 1); }
   else if (e.key === 'Home') { pause(); setFrame(0); }

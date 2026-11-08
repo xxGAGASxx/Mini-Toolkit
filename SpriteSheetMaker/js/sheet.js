@@ -102,6 +102,10 @@ function endDrag(e, cancel) {
 window.addEventListener('pointerup', (e) => endDrag(e, false));
 window.addEventListener('pointercancel', (e) => endDrag(e, true));
 els.viewMain.addEventListener('pointerdown', (e) => {
+  // Cells cancel pointerdown (for dragging), which also stops the browser moving focus. Leave a
+  // focused sidebar field explicitly, so the sheet's keys (Del, Ctrl+D, Esc) go to the sheet.
+  const f = document.activeElement;
+  if (f && f !== document.body && !els.viewMain.contains(f)) f.blur();
   if (e.button !== 1 && !e.target.closest('.cell') && !e.target.closest('button')) select(null);   // middle button pans
 });
 els.sheet.addEventListener('dblclick', (e) => {
