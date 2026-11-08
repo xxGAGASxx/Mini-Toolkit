@@ -115,6 +115,35 @@ els.cw.addEventListener('input', () => { const v = parseInt(els.cw.value, 10); s
 els.ch.addEventListener('input', () => { const v = parseInt(els.ch.value, 10); state.cellH = v > 0 ? Math.min(v, 4096) : 0; schedule(); });
 els.zoom.addEventListener('change', () => { state.zoom = +els.zoom.value; schedule(); });
 
+/* ================= wheel zoom ================= */
+// Each wheel notch steps through ZOOMS, keeping the point under the cursor in place.
+// Trackpad deltas are small, so they add up until they make one step. Shift + wheel and
+// sideways swipes are left to the browser, so the sheet can still scroll sideways.
+let wheelAcc = 0, wheelT = 0;
+els.viewMain.addEventListener('wheel', (e) => {
+  if (!state.sprites.length || e.shiftKey || !e.deltaY) return;
+  e.preventDefault();
+  const d = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 800 : 1);   // lines / pages to px
+  if (e.timeStamp - wheelT > 300 || Math.sign(d) !== Math.sign(wheelAcc)) wheelAcc = 0;
+  wheelT = e.timeStamp;
+  wheelAcc += d;
+  if (Math.abs(wheelAcc) < 50) return;
+  const i = clamp(ZOOMS.indexOf(state.zoom) + (wheelAcc < 0 ? 1 : -1), 0, ZOOMS.length - 1);
+  wheelAcc = 0;
+  zoomAt(ZOOMS[i], e.clientX, e.clientY);
+}, { passive: false });
+
+function zoomAt(z, x, y) {
+  if (z === state.zoom) return;
+  const r = els.sheet.getBoundingClientRect(), k = z / state.zoom;
+  state.zoom = z;
+  els.zoom.value = String(z);
+  render();   // now rather than next frame, so the new size can be measured
+  const r2 = els.sheet.getBoundingClientRect();
+  els.viewMain.scrollLeft += r2.left + (x - r.left) * k - x;
+  els.viewMain.scrollTop += r2.top + (y - r.top) * k - y;
+}
+
 /* ================= color inputs ================= */
 function applyAdj(k, v) {
   const s = selected();
