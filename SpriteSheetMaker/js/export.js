@@ -1,10 +1,11 @@
 'use strict';
-// Export: sheet PNG/JPG, every frame as a ZIP of PNGs, animated GIF.
+// Export: sheet PNG/JPG (optionally with JSON frame data), every frame as a ZIP of PNGs, animated GIF.
 
 /* ================= export ================= */
 els.scale.addEventListener('change', () => { state.scale = +els.scale.value; schedule(); });
 els.bg.addEventListener('input', () => { state.bg = els.bg.value; });
 els.transp.addEventListener('change', () => { state.transparent = els.transp.checked; });
+els.json.addEventListener('change', () => { state.json = els.json.checked; schedule(); });
 
 const blobOf = (c, type, q) => new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('the image is too large for this browser'))), type, q));
 const hexRGB = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
@@ -52,7 +53,42 @@ async function exportSheet(jpg) {
   const b = await blobOf(c, jpg ? 'image/jpeg' : 'image/png', 0.92);
   const name = `spritesheet.${jpg ? 'jpg' : 'png'}`;
   save(b, name);
-  toast(`Saved ${name} · ${c.width}×${c.height} px`);
+  if (state.json) {
+    const data = sheetData(name, jpg, c.width, c.height);
+    save(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), 'spritesheet.json');
+  }
+  toast(`Saved ${name}${state.json ? ' and spritesheet.json' : ''} · ${c.width}×${c.height} px`);
+}
+
+// Frame data in the TexturePacker "JSON (Hash)" layout, which Phaser, PixiJS and many other
+// engines load as an atlas. Each frame is its whole cell, so all frames share one size and line up.
+// Keys are the sprite names, made unique. "animations" lists them in order (PixiJS reads it);
+// "duration" is the frame time in ms at the GIF fps (as Aseprite writes it). Sizes include the
+// export scale, which meta.scale records.
+function sheetData(image, jpg, w, h) {
+  const [cw, ch] = cell(), cols = effCols(), p = state.pad, k = state.scale;
+  const frames = {}, order = [], used = new Set();
+  state.sprites.forEach((s, i) => {
+    let key = s.name;
+    for (let d = 2; used.has(key); d++) key = `${s.name}_${d}`;
+    used.add(key); order.push(key);
+    frames[key] = {
+      frame: { x: (i % cols) * (cw + p) * k, y: Math.floor(i / cols) * (ch + p) * k, w: cw * k, h: ch * k },
+      rotated: false,
+      trimmed: false,
+      spriteSourceSize: { x: 0, y: 0, w: cw * k, h: ch * k },
+      sourceSize: { w: cw * k, h: ch * k },
+      duration: Math.round(1000 / state.fps),
+    };
+  });
+  return {
+    frames,
+    animations: { [image.replace(/\.\w+$/, '')]: order },
+    meta: {
+      app: 'Sprite Sheet Maker', version: '1.0', image,
+      format: jpg ? 'RGB888' : 'RGBA8888', size: { w, h }, scale: String(k),
+    },
+  };
 }
 async function exportZip() {
   const n = state.sprites.length, digits = Math.max(2, String(n).length), fill = state.transparent ? null : state.bg, files = [];

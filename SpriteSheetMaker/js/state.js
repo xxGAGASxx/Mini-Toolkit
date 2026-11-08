@@ -16,7 +16,7 @@ const state = {
   global: { ...DEF },
   tab: 'main', frame: 0, playing: false, fps: 12,
   onionPrev: false, onionNext: false, onionN: 1, onionA: 35,
-  scale: 1, bg: '#ffffff', transparent: true,
+  scale: 1, bg: '#ffffff', transparent: true, json: false,
 };
 let uid = 1, busy = false;
 
@@ -36,7 +36,7 @@ const els = {
   frameTitle: $('#frame-title'), frameInfo: $('#frame-info'),
   offX: $('#off-x'), offY: $('#off-y'), offReset: $('#off-reset'),
   onionPrev: $('#onion-prev'), onionNext: $('#onion-next'), onionN: $('#onion-n'), onionA: $('#onion-a'), onionAOut: $('#onion-a-out'),
-  scale: $('#scale'), bg: $('#bg'), transp: $('#transp'), exNote: $('#ex-note'), exportBtns: $$('.ex'),
+  scale: $('#scale'), bg: $('#bg'), transp: $('#transp'), json: $('#ex-json'), exNote: $('#ex-note'), exportBtns: $$('.ex'),
 };
 
 const selIdx = () => state.sprites.findIndex((s) => s.id === state.sel);
