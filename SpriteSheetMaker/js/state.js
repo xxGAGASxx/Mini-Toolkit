@@ -15,7 +15,7 @@ const state = {
   align: [0.5, 1],      // last "align all" anchor, also used for new sprites
   global: { ...DEF },
   tab: 'main', frame: 0, playing: false, fps: 12,
-  onion: false, onionN: 1, onionA: 35,
+  onionPrev: false, onionNext: false, onionN: 1, onionA: 35,
   scale: 1, bg: '#ffffff', transparent: true,
 };
 let uid = 1, busy = false;
@@ -35,7 +35,7 @@ const els = {
   frame: $('#frame'), frameLabel: $('#frame-label'), fps: $('#fps'),
   frameTitle: $('#frame-title'), frameInfo: $('#frame-info'),
   offX: $('#off-x'), offY: $('#off-y'), offReset: $('#off-reset'),
-  onion: $('#onion'), onionN: $('#onion-n'), onionA: $('#onion-a'), onionAOut: $('#onion-a-out'),
+  onionPrev: $('#onion-prev'), onionNext: $('#onion-next'), onionN: $('#onion-n'), onionA: $('#onion-a'), onionAOut: $('#onion-a-out'),
   scale: $('#scale'), bg: $('#bg'), transp: $('#transp'), exNote: $('#ex-note'), exportBtns: $$('.ex'),
 };
 

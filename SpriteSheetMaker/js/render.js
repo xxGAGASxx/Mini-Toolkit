@@ -102,11 +102,13 @@ function renderPreview() {
 
   const x = c.getContext('2d');
   x.clearRect(0, 0, cw, ch);
-  if (state.onion && !state.playing) {
+  const sides = [state.onionPrev && -1, state.onionNext && 1].filter(Boolean);
+  if (sides.length && !state.playing) {
     const k = state.onionN, a = state.onionA / 100;
     for (let d = k; d >= 1; d--) {            // farthest first, fading with distance
       x.globalAlpha = a * (1 - (d - 1) / k);
-      for (const j of [state.frame - d, state.frame + d]) {
+      for (const side of sides) {
+        const j = state.frame + side * d;
         if (j < 0 || j >= n) continue;
         const o = state.sprites[j], [px, py] = pos(o, cw, ch);
         x.drawImage(procOf(o), px, py);

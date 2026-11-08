@@ -55,7 +55,8 @@ els.offX.addEventListener('input', () => { const s = cur(), v = parseInt(els.off
 els.offY.addEventListener('input', () => { const s = cur(), v = parseInt(els.offY.value, 10); if (s && !isNaN(v)) { s.oy = v; schedule(); } });
 els.offReset.addEventListener('click', () => { const s = cur(); if (s) { s.ox = 0; s.oy = 0; schedule(); } });
 
-els.onion.addEventListener('change', () => { state.onion = els.onion.checked; schedule(); });
+els.onionPrev.addEventListener('change', () => { state.onionPrev = els.onionPrev.checked; schedule(); });
+els.onionNext.addEventListener('change', () => { state.onionNext = els.onionNext.checked; schedule(); });
 els.onionN.addEventListener('input', () => { const v = parseInt(els.onionN.value, 10); if (v > 0) { state.onionN = clamp(v, 1, 8); schedule(); } });
 els.onionA.addEventListener('input', () => { state.onionA = +els.onionA.value; els.onionAOut.textContent = state.onionA + '%'; schedule(); });
 
