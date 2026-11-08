@@ -14,6 +14,14 @@
     <button role="tab" id="tab-main" aria-selected="true" aria-controls="view-main">Main</button>
     <button role="tab" id="tab-preview" aria-selected="false" aria-controls="view-preview">Preview</button>
   </div>
+  <div class="hist">
+    <button class="ibtn" id="btn-undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"/></svg>
+    </button>
+    <button class="ibtn" id="btn-redo" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.5 3.5 0 0 0 0 7h2.5"/></svg>
+    </button>
+  </div>
   <div class="stats" id="stats"></div>
 </header>
 
@@ -111,6 +119,7 @@
             <dt>, &nbsp;.</dt><dd>Previous / next frame</dd>
             <dt>Arrows</dt><dd>Nudge sprite 1 px</dd>
             <dt>Shift + arrows</dt><dd>Nudge 10 px</dd>
+            <dt>Ctrl Z, Ctrl Y</dt><dd>Undo / redo align all, arrange and color</dd>
           </dl>
         </section>
       </div>
@@ -192,6 +201,7 @@
 <script src="js/gif.js"></script>
 <script src="js/color.js"></script>
 <script src="js/state.js"></script>
+<script src="js/history.js"></script>
 <script src="js/render.js"></script>
 <script src="js/sheet.js"></script>
 <script src="js/preview.js"></script>

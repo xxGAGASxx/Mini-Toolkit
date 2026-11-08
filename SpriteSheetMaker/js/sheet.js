@@ -85,13 +85,13 @@ function endDrag(e, cancel) {
     d.ghost.remove(); d.ins.remove();
     document.body.classList.remove('dragging');
     $$('.cell.lift, .cell.over').forEach((c) => c.classList.remove('lift', 'over'));
-    const t = cancel ? null : d.target, a = state.sprites;
+    const t = cancel ? null : d.target;
     if (t && !t.side) {
-      [a[d.from], a[t.i]] = [a[t.i], a[d.from]];
+      record('swap', ['order'], () => { const a = state.sprites; [a[d.from], a[t.i]] = [a[t.i], a[d.from]]; });
       toast(`Swapped ${d.from + 1} and ${t.i + 1}`);
     } else if (t) {
       const at = t.side > 0 ? t.i + 1 : t.i, to = at > d.from ? at - 1 : at;
-      a.splice(to, 0, a.splice(d.from, 1)[0]);
+      record('move', ['order'], () => { const a = state.sprites; a.splice(to, 0, a.splice(d.from, 1)[0]); });
       toast(`Moved ${d.from + 1} to position ${to + 1}`);
     }
     schedule();
@@ -112,22 +112,24 @@ els.sheet.addEventListener('dblclick', (e) => {
 /* ================= arrange ================= */
 function duplicate() {
   const i = selIdx(); if (i < 0) return;
-  const s = state.sprites[i];
-  const copy = { ...s, id: uid++, adj: { ...s.adj }, proc: null, dirty: true };
-  state.sprites.splice(i + 1, 0, copy);
-  state.sel = copy.id;
-  schedule();
+  record('duplicate', ['order'], () => {
+    const s = state.sprites[i];
+    const copy = { ...s, id: uid++, adj: { ...s.adj }, proc: null, dirty: true };
+    state.sprites.splice(i + 1, 0, copy);
+    state.sel = copy.id;
+  });
 }
 function removeSel() {
   const i = selIdx(); if (i < 0) return;
-  state.sprites.splice(i, 1);
-  const nx = state.sprites[Math.min(i, state.sprites.length - 1)];
-  state.sel = nx ? nx.id : null;
-  schedule();
+  record('delete', ['order'], () => {
+    state.sprites.splice(i, 1);
+    const nx = state.sprites[Math.min(i, state.sprites.length - 1)];
+    state.sel = nx ? nx.id : null;
+  });
 }
 els.dup.addEventListener('click', duplicate);
 els.del.addEventListener('click', removeSel);
-els.rev.addEventListener('click', () => { state.sprites.reverse(); toast('Reversed the order'); schedule(); });
+els.rev.addEventListener('click', () => { record('reverse order', ['order'], () => { state.sprites.reverse(); }); toast('Reversed the order'); });
 let clearArmed = 0;
 els.clear.addEventListener('click', () => {
   if (!clearArmed) {
@@ -137,8 +139,7 @@ els.clear.addEventListener('click', () => {
     return;
   }
   disarmClear();
-  state.sprites = []; state.sel = null; state.frame = 0;
-  schedule();
+  record('clear all', ['order'], () => { state.sprites = []; state.sel = null; state.frame = 0; });
 });
 function disarmClear() { clearTimeout(clearArmed); clearArmed = 0; els.clear.textContent = 'Clear all'; els.clear.classList.remove('armed'); }
 
@@ -200,11 +201,14 @@ function endPan() { pan = null; document.body.classList.remove('panning'); }
 els.viewMain.addEventListener('lostpointercapture', endPan);
 
 /* ================= color inputs ================= */
+const ADJ_NAMES = { h: 'hue', s: 'saturation', b: 'brightness', c: 'contrast' };
 function applyAdj(k, v) {
   const s = selected();
-  if (s) { s.adj[k] = v; s.dirty = true; }
-  else { state.global[k] = v; markAllDirty(); }
-  schedule();
+  record(ADJ_NAMES[k], ['color'], () => {
+    if ((s ? s.adj : state.global)[k] === v) return false;
+    if (s) { s.adj[k] = v; s.dirty = true; }
+    else { state.global[k] = v; markAllDirty(); }
+  }, `${k}:${s ? s.id : 'all'}`);
 }
 for (const k of 'hsbc') {
   const inp = $('#adj-' + k);
@@ -213,16 +217,26 @@ for (const k of 'hsbc') {
 }
 els.adjReset.addEventListener('click', () => {
   const s = selected();
-  if (s) { s.adj = { ...DEF }; s.dirty = true; toast(`Reset color of sprite ${selIdx() + 1}`); }
-  else { state.global = { ...DEF }; state.sprites.forEach((x) => (x.adj = { ...DEF })); markAllDirty(); toast('Reset color of all sprites'); }
-  schedule();
+  record('reset color', ['color'], () => {
+    if (s) {
+      if (isId(s.adj)) return false;
+      s.adj = { ...DEF }; s.dirty = true;
+    } else {
+      if (isId(state.global) && state.sprites.every((x) => isId(x.adj))) return false;
+      state.global = { ...DEF }; state.sprites.forEach((x) => (x.adj = { ...DEF })); markAllDirty();
+    }
+  });
+  toast(s ? `Reset color of sprite ${selIdx() + 1}` : 'Reset color of all sprites');
 });
 els.adjTarget.addEventListener('click', () => { if (state.sel != null) select(null); });
 
 /* ================= align all ================= */
 buildAnchor(els.alignAll, (ax, ay, label) => {
-  state.align = [ax, ay];
-  for (const s of state.sprites) { s.ax = ax; s.ay = ay; s.ox = 0; s.oy = 0; }
+  record('align all', ['align'], () => {
+    const done = (s) => s.ax === ax && s.ay === ay && !s.ox && !s.oy;
+    if (state.align[0] === ax && state.align[1] === ay && state.sprites.every(done)) return false;
+    state.align = [ax, ay];
+    for (const s of state.sprites) { s.ax = ax; s.ay = ay; s.ox = 0; s.oy = 0; }
+  });
   toast(`Aligned all sprites: ${label.toLowerCase()}`);
-  schedule();
 });

@@ -26,6 +26,11 @@ function updateUI() {
   els.dup.disabled = els.del.disabled = !s;
   els.rev.disabled = n < 2;
   els.clear.disabled = !n;
+  const u = hist.undo[hist.undo.length - 1], r = hist.redo[hist.redo.length - 1];
+  els.undo.disabled = !u;
+  els.redo.disabled = !r;
+  els.undo.title = u ? `Undo ${u.label} (Ctrl+Z)` : 'Undo (Ctrl+Z)';
+  els.redo.title = r ? `Redo ${r.label} (Ctrl+Y)` : 'Redo (Ctrl+Y)';
   els.exportBtns.forEach((b) => (b.disabled = !n || busy));
   els.exNote.textContent = `Frames export at cell size${state.scale > 1 ? ` ×${state.scale}` : ''}. JPEG always fills the background. GIF plays at ${state.fps} fps.`;
   markAnchor(els.alignAll, state.align[0], state.align[1]);

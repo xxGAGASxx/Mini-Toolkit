@@ -16,7 +16,13 @@ els.tabMain.addEventListener('click', () => setTab('main'));
 els.tabPrev.addEventListener('click', () => setTab('preview'));
 
 document.addEventListener('keydown', (e) => {
-  const t = e.target;
+  const t = e.target, k = e.key.toLowerCase();
+  // Undo / redo work in both tabs, also with a slider focused. Number boxes keep their own text undo.
+  if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && !(t.closest && t.closest('input[type=number], textarea'))) {
+    e.preventDefault();
+    if (!drag) (k === 'y' || e.shiftKey ? redo : undo)();   // not mid-drag: the drop needs the order it started with
+    return;
+  }
   if (t.closest && t.closest('input, select, textarea')) return;
   if (state.tab === 'main') {
     if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel != null) { e.preventDefault(); removeSel(); }

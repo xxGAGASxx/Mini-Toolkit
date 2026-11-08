@@ -21,7 +21,7 @@ const state = {
 let uid = 1, busy = false;
 
 const els = {
-  stats: $('#stats'), file: $('#file'), drop: $('#drop'),
+  stats: $('#stats'), file: $('#file'), drop: $('#drop'), undo: $('#btn-undo'), redo: $('#btn-redo'),
   tabMain: $('#tab-main'), tabPrev: $('#tab-preview'),
   sideMain: $('#side-main'), sidePrev: $('#side-preview'),
   viewMain: $('#view-main'), viewPrev: $('#view-preview'),

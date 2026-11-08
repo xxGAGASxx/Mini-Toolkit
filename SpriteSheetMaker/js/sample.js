@@ -27,10 +27,11 @@ function slimeFrame(i, n) {
   return c;
 }
 function loadSample() {
-  state.sprites = Array.from({ length: 8 }, (_, i) => makeSprite(slimeFrame(i, 8), `slime_${i + 1}`, true));
+  clearHistory();
+  state.sprites =Array.from({ length: 8 }, (_, i) => makeSprite(slimeFrame(i, 8), `slime_${i + 1}`, true));
   state.sel = null; state.frame = 0;
   autoZoom();
   schedule();
 }
 $('#empty-sample').addEventListener('click', loadSample);
-$('#sample-clear').addEventListener('click', () => { state.sprites = []; state.sel = null; schedule(); });
+$('#sample-clear').addEventListener('click', () => { clearHistory(); state.sprites = []; state.sel = null; schedule(); });

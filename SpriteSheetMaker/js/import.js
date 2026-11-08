@@ -42,7 +42,10 @@ async function addFiles(list) {
   }
   if (!added.length) { toast('Those files could not be read as images.'); return; }
   const fresh = !state.sprites.length || state.sprites.every((s) => s.sample);
-  if (fresh) { state.sprites = []; state.sel = null; state.frame = 0; }
+  if (fresh) {
+    if (state.sprites.length) clearHistory();   // the sample frames go away: their history no longer applies
+    state.sprites = []; state.sel = null; state.frame = 0;
+  }
   state.sprites.push(...added);
   if (fresh) autoZoom();
   toast(`Added ${added.length} sprite${added.length > 1 ? 's' : ''}${failed ? ` · ${failed} file${failed > 1 ? 's' : ''} skipped` : ''}`);
