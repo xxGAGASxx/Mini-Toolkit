@@ -232,6 +232,25 @@ body.dragging, body.dragging *, body.panning, body.panning * { cursor: grabbing 
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* ---------- import sheet dialog */
+.dlg {
+  width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg);
+  box-shadow: 0 24px 48px -16px var(--shadow);
+}
+.dlg::backdrop { background: var(--scrim); }
+.dlg-body { display: grid; gap: 12px; padding: 18px 20px; }
+.slice-box {
+  display: grid; place-items: center; min-height: 140px; padding: 12px; border-radius: 8px;
+  background-color: var(--paste); background-image: radial-gradient(var(--dot) 1px, transparent 1.6px); background-size: 16px 16px;
+}
+#slice-pv { display: block; background: var(--checker); box-shadow: 0 0 0 1px var(--line); }
+.slice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; }
+.dlg-checks { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.dlg-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dlg-foot .hint { margin-right: auto; }
+@media (max-width: 520px) { .slice-grid { grid-template-columns: 1fr 1fr; } }
+
 @media (max-width: 760px) {
   html, body { height: auto; }
   .app { display: flex; flex-direction: column; }

@@ -33,8 +33,11 @@
       <div id="side-main">
         <section class="sec">
           <h2>Sprites</h2>
-          <div><button class="btn primary" id="btn-add" type="button">Add sprites…</button></div>
-          <p class="hint">Drop PNG, JPEG or GIF files anywhere, or paste them. Files are ordered by name. Animated GIFs are split into frames in Chrome and Edge.</p>
+          <div class="btns">
+            <button class="btn primary" id="btn-add" type="button">Add sprites…</button>
+            <button class="btn" id="btn-sheet" type="button">Import sheet…</button>
+          </div>
+          <p class="hint">Drop PNG, JPEG or GIF files anywhere, or paste them. Files are ordered by name. Animated GIFs are split into frames in Chrome and Edge. Import sheet cuts one image into frames along a grid.</p>
         </section>
 
         <section class="sec">
@@ -160,6 +163,7 @@
           <p class="hint">PNG, JPEG or GIF. You can also paste images from the clipboard.</p>
           <div class="row">
             <button class="btn primary" id="empty-add" type="button">Add sprites…</button>
+            <button class="btn" id="empty-sheet" type="button">Import sheet…</button>
             <button class="btn" id="empty-sample" type="button">Load sample</button>
           </div>
         </div>
@@ -191,8 +195,37 @@
 </div>
 
 <input type="file" id="file" accept="image/png,image/jpeg,image/gif" multiple hidden>
+<input type="file" id="sheet-file" accept="image/png,image/jpeg,image/gif" hidden>
 <div class="filedrop" id="drop" hidden><div>Drop to add sprites</div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog class="dlg" id="slice-dlg" aria-labelledby="slice-title">
+  <form class="dlg-body" id="slice-form">
+    <div class="sec-head">
+      <h2 id="slice-title">Import sprite sheet</h2>
+      <span class="mono muted trunc" id="slice-info"></span>
+    </div>
+    <div class="slice-box" id="slice-box"><canvas id="slice-pv" width="1" height="1"></canvas></div>
+    <div class="slice-grid">
+      <label class="fld">Columns<input type="number" id="sl-cols" min="1" max="256"></label>
+      <label class="fld">Cell width<input type="number" id="sl-cw" min="1" max="4096"></label>
+      <label class="fld">Padding (px)<input type="number" id="sl-pad" min="0" max="512"></label>
+      <label class="fld">Rows<input type="number" id="sl-rows" min="1" max="256"></label>
+      <label class="fld">Cell height<input type="number" id="sl-ch" min="1" max="4096"></label>
+      <label class="fld">Margin (px)<input type="number" id="sl-margin" min="0" max="512"></label>
+    </div>
+    <div class="dlg-checks">
+      <label class="check"><input type="checkbox" id="sl-trim" checked> Trim empty pixels</label>
+      <label class="check"><input type="checkbox" id="sl-skip" checked> Skip empty cells</label>
+    </div>
+    <p class="hint">Padding is the gap between cells, margin the border around the whole sheet. Changing the columns updates the cell width and the other way round; the same goes for rows and cell height. Frames are read row by row. Trimmed frames are placed in their cells by the Align all sprites anchor.</p>
+    <div class="dlg-foot">
+      <span class="hint" id="slice-sum"></span>
+      <button class="btn" id="slice-cancel" type="button">Cancel</button>
+      <button class="btn primary" id="slice-ok" type="submit">Import</button>
+    </div>
+  </form>
+</dialog>
 
 <!-- Plain scripts, not modules, so the page still works opened straight from disk.
      They share one global scope; order matters, since each may use what loaded before it. -->
@@ -206,6 +239,7 @@
 <script src="js/sheet.js"></script>
 <script src="js/preview.js"></script>
 <script src="js/import.js"></script>
+<script src="js/slice.js"></script>
 <script src="js/sample.js"></script>
 <script src="js/export.js"></script>
 <script src="js/app.js"></script>

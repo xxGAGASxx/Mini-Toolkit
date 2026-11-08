@@ -16,6 +16,7 @@ els.tabMain.addEventListener('click', () => setTab('main'));
 els.tabPrev.addEventListener('click', () => setTab('preview'));
 
 document.addEventListener('keydown', (e) => {
+  if (modalOpen()) return;   // the dialog handles its own keys (Esc closes it); nothing reaches the sheet behind
   const t = e.target, k = e.key.toLowerCase();
   // Undo / redo work in both tabs, also with a slider focused. Number boxes keep their own text undo.
   if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'y') && !(t.closest && t.closest('input[type=number], textarea'))) {

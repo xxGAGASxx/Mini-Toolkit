@@ -41,14 +41,24 @@ async function addFiles(list) {
     } catch (e) { failed++; }
   }
   if (!added.length) { toast('Those files could not be read as images.'); return; }
+  insertSprites(added, `Added ${added.length} sprite${added.length > 1 ? 's' : ''}${failed ? ` · ${failed} file${failed > 1 ? 's' : ''} skipped` : ''}`);
+}
+
+// Puts new sprites into the sheet: after the existing ones, or in place of the sample frames
+// (and into an empty sheet), in which case a layout from an imported sheet ({ cols, pad }) is taken over too.
+function insertSprites(added, msg, layout) {
   const fresh = !state.sprites.length || state.sprites.every((s) => s.sample);
   if (fresh) {
     if (state.sprites.length) clearHistory();   // the sample frames go away: their history no longer applies
     state.sprites = []; state.sel = null; state.frame = 0;
+    if (layout) {
+      state.cols = layout.cols; els.cols.value = layout.cols;
+      state.pad = layout.pad; els.pad.value = layout.pad;
+    }
   }
   state.sprites.push(...added);
   if (fresh) autoZoom();
-  toast(`Added ${added.length} sprite${added.length > 1 ? 's' : ''}${failed ? ` · ${failed} file${failed > 1 ? 's' : ''} skipped` : ''}`);
+  toast(msg);
   schedule();
 }
 
@@ -58,8 +68,9 @@ $('#empty-add').addEventListener('click', () => els.file.click());
 
 let dragDepth = 0;
 const hasFiles = (e) => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; els.drop.hidden = false; });
-window.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+// While a dialog is open, dropped and pasted files are ignored (a drop is still cancelled, so the page stays).
+window.addEventListener('dragenter', (e) => { if (!hasFiles(e) || modalOpen()) return; e.preventDefault(); dragDepth++; els.drop.hidden = false; });
+window.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = modalOpen() ? 'none' : 'copy'; });
 window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) els.drop.hidden = true; });
-window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; els.drop.hidden = true; addFiles(e.dataTransfer.files); });
-document.addEventListener('paste', (e) => { const f = e.clipboardData ? [...e.clipboardData.files] : []; if (f.length) { e.preventDefault(); addFiles(f); } });
+window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; els.drop.hidden = true; if (!modalOpen()) addFiles(e.dataTransfer.files); });
+document.addEventListener('paste', (e) => { const f = e.clipboardData ? [...e.clipboardData.files] : []; if (f.length && !modalOpen()) { e.preventDefault(); addFiles(f); } });
