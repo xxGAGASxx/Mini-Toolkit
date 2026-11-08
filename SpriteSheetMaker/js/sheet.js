@@ -68,7 +68,7 @@ function endDrag(e, cancel) {
 window.addEventListener('pointerup', (e) => endDrag(e, false));
 window.addEventListener('pointercancel', (e) => endDrag(e, true));
 els.viewMain.addEventListener('pointerdown', (e) => {
-  if (!e.target.closest('.cell') && !e.target.closest('button')) select(null);
+  if (e.button !== 1 && !e.target.closest('.cell') && !e.target.closest('button')) select(null);   // middle button pans
 });
 els.sheet.addEventListener('dblclick', (e) => {
   const c = e.target.closest('.cell'); if (!c) return;
@@ -143,6 +143,27 @@ function zoomAt(z, x, y) {
   els.viewMain.scrollLeft += r2.left + (x - r.left) * k - x;
   els.viewMain.scrollTop += r2.top + (y - r.top) * k - y;
 }
+
+/* ================= middle-drag pan ================= */
+// Moves are applied as deltas, so zooming with the wheel mid-pan doesn't make the view jump.
+let pan = null;
+// Cancelling mousedown (not pointerdown) is what stops the browser's middle-click autoscroll.
+els.viewMain.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
+els.viewMain.addEventListener('pointerdown', (e) => {
+  if (e.button !== 1 || pan) return;
+  els.viewMain.setPointerCapture(e.pointerId);
+  pan = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  document.body.classList.add('panning');
+});
+els.viewMain.addEventListener('pointermove', (e) => {
+  if (!pan || e.pointerId !== pan.id) return;
+  if (!(e.buttons & 4)) { endPan(); return; }   // middle released while another button is still down
+  els.viewMain.scrollLeft -= e.clientX - pan.x;
+  els.viewMain.scrollTop -= e.clientY - pan.y;
+  pan.x = e.clientX; pan.y = e.clientY;
+});
+function endPan() { pan = null; document.body.classList.remove('panning'); }
+els.viewMain.addEventListener('lostpointercapture', endPan);
 
 /* ================= color inputs ================= */
 function applyAdj(k, v) {
