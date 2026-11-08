@@ -218,20 +218,24 @@ function endPan() { pan = null; document.body.classList.remove('panning'); }
 els.viewMain.addEventListener('lostpointercapture', endPan);
 
 /* ================= color inputs ================= */
-const ADJ_NAMES = { h: 'hue', s: 'saturation', b: 'brightness', c: 'contrast', t: 'transparency' };
+const ADJ_NAMES = { h: 'hue', s: 'saturation', b: 'brightness', c: 'contrast', o: 'overlay', oc: 'overlay color', t: 'transparency' };
 function applyAdj(k, v) {
   const s = selected();
   record(ADJ_NAMES[k], ['color'], () => {
-    if ((s ? s.adj : state.global)[k] === v) return false;
-    if (s) { s.adj[k] = v; s.dirty = true; }
-    else { state.global[k] = v; markAllDirty(); }
+    const a = s ? s.adj : state.global;
+    if (a[k] === v) return false;
+    a[k] = v;
+    if (k === 'oc' && !a.o) a.o = 50;   // a picked color should show: at 0% the overlay does nothing
+    if (s) s.dirty = true; else markAllDirty();
   }, `${k}:${s ? s.id : 'all'}`);
 }
-for (const k of 'hsbct') {
+for (const k of 'hsbcot') {
   const inp = $('#adj-' + k);
   inp.addEventListener('input', () => applyAdj(k, +inp.value));
   inp.addEventListener('dblclick', () => { inp.value = DEF[k]; applyAdj(k, DEF[k]); });
 }
+const ocInp = $('#adj-oc');
+ocInp.addEventListener('input', () => applyAdj('oc', ocInp.value));
 els.adjReset.addEventListener('click', () => {
   const s = selected();
   record('reset color', ['color'], () => {

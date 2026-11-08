@@ -130,6 +130,8 @@ kbd { font: 10px/1 var(--mono); color: var(--muted); border: 1px solid var(--lin
 .anc.on::after { background: var(--accent-fg); opacity: 1; }
 
 .sl { display: grid; grid-template-columns: 88px minmax(0, 1fr) 50px; align-items: center; gap: 8px; font-size: 12.5px; }
+.sl-lbl { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.sl-lbl input[type=color] { flex: none; width: 26px; height: 20px; padding: 1px; border-radius: 4px; }
 .sl output { font: 12px var(--mono); text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chip {
   font: 600 11.5px/1 var(--font); padding: 5px 9px; border-radius: 999px;

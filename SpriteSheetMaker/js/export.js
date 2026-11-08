@@ -8,7 +8,6 @@ els.transp.addEventListener('change', () => { state.transparent = els.transp.che
 els.json.addEventListener('change', () => { state.json = els.json.checked; schedule(); });
 
 const blobOf = (c, type, q) => new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('the image is too large for this browser'))), type, q));
-const hexRGB = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 function save(blob, name) {
   const url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = name;

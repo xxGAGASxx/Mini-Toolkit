@@ -1,9 +1,10 @@
 'use strict';
-// Per-sprite color adjustment: an affine color matrix (same math as CSS filters) plus an
-// alpha factor for transparency, and the cache of processed canvases it produces.
+// Per-sprite color adjustment: an affine color matrix (same math as CSS filters, then the color
+// overlay) plus an alpha factor for transparency, and the cache of processed canvases it produces.
 
-const DEF = { h: 0, s: 100, b: 100, c: 100, t: 0 };
-const isId = (a) => a.h === 0 && a.s === 100 && a.b === 100 && a.c === 100 && a.t === 0;
+// o: overlay amount (%), oc: overlay color; the color alone changes nothing while o is 0.
+const DEF = { h: 0, s: 100, b: 100, c: 100, o: 0, oc: '#ffffff', t: 0 };
+const isId = (a) => a.h === 0 && a.s === 100 && a.b === 100 && a.c === 100 && a.o === 0 && a.t === 0;
 
 function mul3(A, B) {
   const R = new Array(9);
@@ -25,7 +26,9 @@ function affine(a) {
   ];
   const M = mul3(S, H).map((v) => v * b * k);   // hue → saturation → brightness → contrast
   const o = 127.5 * (1 - k);
-  return { M, o: [o, o, o], al: 1 - a.t / 100 };
+  // → overlay: a blend toward its color, (1 − w)·rgb + w·color, which is affine too.
+  const w = a.o / 100, C = hexRGB(a.oc);
+  return { M: M.map((v) => v * (1 - w)), o: C.map((c) => o * (1 - w) + c * w), al: 1 - a.t / 100 };
 }
 // Transparencies stack: 50% on the sprite and 50% on all sprites leave it at 25% opacity.
 function compose(outer, inner) {

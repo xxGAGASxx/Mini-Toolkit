@@ -37,11 +37,13 @@ function updateUI() {
   markAnchor(els.alignAll, state.align[0], state.align[1]);
   // color panel follows the selection
   const a = s ? s.adj : state.global;
-  for (const k of 'hsbct') {
+  for (const k of 'hsbcot') {
     const inp = $('#adj-' + k);
     if (+inp.value !== a[k]) inp.value = a[k];
     $('#out-' + k).textContent = fmtAdj(k, a[k]);
   }
+  const oc = $('#adj-oc');
+  if (oc.value !== a.oc) oc.value = a.oc;
   els.adjTarget.textContent = s ? `Sprite ${selIdx() + 1} only ✕` : 'All sprites';
   els.adjTarget.classList.toggle('one', !!s);
   els.adjTarget.title = s ? 'Clear selection to adjust all sprites' : '';
