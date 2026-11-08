@@ -60,6 +60,31 @@ els.onionNext.addEventListener('change', () => { state.onionNext = els.onionNext
 els.onionN.addEventListener('input', () => { const v = parseInt(els.onionN.value, 10); if (v > 0) { state.onionN = clamp(v, 1, 8); schedule(); } });
 els.onionA.addEventListener('input', () => { state.onionA = +els.onionA.value; els.onionAOut.textContent = state.onionA + '%'; schedule(); });
 
+/* ================= guides ================= */
+els.guideOn.addEventListener('change', () => { state.guide = els.guideOn.checked; schedule(); });
+// Dragging the crossing moves both lines, in whole cell pixels. The handle sits inside the preview,
+// so its pointerdown stops there and doesn't also start dragging the sprite. Playback keeps going.
+let guideDrag = null;
+els.guideX.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  els.guideX.setPointerCapture(e.pointerId);
+  const k = els.pv.getBoundingClientRect().width / els.pv.width;
+  guideDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, gx: state.gx, gy: state.gy, k };
+  els.guideX.classList.add('on');
+});
+els.guideX.addEventListener('pointermove', (e) => {
+  if (!guideDrag || e.pointerId !== guideDrag.id) return;
+  const [cw, ch] = cell(), d = guideDrag;
+  const gx = clamp(d.gx + Math.round((e.clientX - d.x) / d.k), 0, cw);
+  const gy = clamp(d.gy + Math.round((e.clientY - d.y) / d.k), 0, ch);
+  if (gx !== state.gx || gy !== state.gy) { state.gx = gx; state.gy = gy; schedule(); }
+});
+const endGuide = () => { guideDrag = null; els.guideX.classList.remove('on'); };
+els.guideX.addEventListener('pointerup', endGuide);
+els.guideX.addEventListener('pointercancel', endGuide);
+els.guideX.addEventListener('lostpointercapture', endGuide);
+
 /* ================= align frame ================= */
 buildAnchor(els.alignFrame, (ax, ay) => {
   const s = cur(); if (!s) return;

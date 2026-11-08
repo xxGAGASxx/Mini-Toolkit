@@ -96,7 +96,7 @@ function renderPreview() {
   c.hidden = !n;
   els.pvEmpty.hidden = !!n;
   [els.offX, els.offY, els.offReset].forEach((e) => (e.disabled = !n));
-  if (!n) { els.frameTitle.textContent = 'Frame'; els.frameInfo.textContent = ''; return; }
+  if (!n) { els.frameTitle.textContent = 'Frame'; els.frameInfo.textContent = ''; placeGuide(0, 0); return; }
 
   const [cw, ch] = cell();
   if (c.width !== cw) c.width = cw;
@@ -133,6 +133,25 @@ function renderPreview() {
   if (document.activeElement !== els.offX) els.offX.value = s.ox;
   if (document.activeElement !== els.offY) els.offY.value = s.oy;
   markAnchor(els.alignFrame, s.ax, s.ay);
+  placeGuide(cw, ch);
+}
+
+// The crosshair spans the whole preview and crosses at (gx, gy) cell pixels: on pixel borders,
+// gx = 0 being the cell's left edge. It is laid over the canvas rather than drawn into it, so the
+// lines stay one screen pixel wide at any zoom and never reach an export.
+function placeGuide(cw, ch) {
+  const on = state.guide && cw > 0;
+  els.guide.hidden = !on;
+  els.guidePos.textContent = '';
+  if (!on) return;
+  if (state.gx == null) { state.gx = Math.round(cw / 2); state.gy = Math.round(ch / 2); }
+  state.gx = clamp(state.gx, 0, cw); state.gy = clamp(state.gy, 0, ch);   // the cell may have shrunk
+  const w = els.pvWrap.getBoundingClientRect(), r = els.pv.getBoundingClientRect(), k = r.width / cw;
+  const x = Math.round(r.left - w.left + state.gx * k), y = Math.round(r.top - w.top + state.gy * k);
+  els.guideV.style.transform = `translateX(${x}px)`;
+  els.guideH.style.transform = `translateY(${y}px)`;
+  els.guideX.style.transform = `translate(${x}px, ${y}px)`;
+  els.guidePos.textContent = `x ${state.gx} · y ${state.gy}`;
 }
 
 /* ================= anchors ================= */

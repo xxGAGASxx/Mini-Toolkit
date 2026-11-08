@@ -17,6 +17,7 @@
   --cellline: rgba(27, 32, 48, .22);
   --scrim: rgba(233, 236, 242, .78);
   --shadow: rgba(15, 20, 35, .28);
+  --guide: #0a9fd8;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
   --checker: repeating-conic-gradient(var(--chk-a) 0 25%, var(--chk-b) 0 50%) 0 0 / 12px 12px;
@@ -27,7 +28,7 @@
     --bg: #14161c; --panel: #1b1e26; --panel-2: #20242e; --line: #2f3442; --fg: #e5e8ef; --muted: #979eb0;
     --accent: #ff7347; --accent-fg: #1a0c06; --accent-soft: rgba(255, 115, 71, .17);
     --paste: #0f1116; --dot: #242833; --chk-a: #3a3f4b; --chk-b: #2c303a; --cellline: rgba(229, 232, 239, .22);
-    --scrim: rgba(15, 17, 22, .78); --shadow: rgba(0, 0, 0, .6);
+    --scrim: rgba(15, 17, 22, .78); --shadow: rgba(0, 0, 0, .6); --guide: #47c8ff;
     color-scheme: dark;
   }
 }
@@ -35,7 +36,7 @@
   --bg: #14161c; --panel: #1b1e26; --panel-2: #20242e; --line: #2f3442; --fg: #e5e8ef; --muted: #979eb0;
   --accent: #ff7347; --accent-fg: #1a0c06; --accent-soft: rgba(255, 115, 71, .17);
   --paste: #0f1116; --dot: #242833; --chk-a: #3a3f4b; --chk-b: #2c303a; --cellline: rgba(229, 232, 239, .22);
-  --scrim: rgba(15, 17, 22, .78); --shadow: rgba(0, 0, 0, .6);
+  --scrim: rgba(15, 17, 22, .78); --shadow: rgba(0, 0, 0, .6); --guide: #47c8ff;
   color-scheme: dark;
 }
 
@@ -196,10 +197,21 @@ button.chip.one { cursor: pointer; color: var(--accent); border-color: var(--acc
 .empty .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 
 #view-preview { position: absolute; inset: 0; display: flex; flex-direction: column; }
-.pv-wrap { flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; cursor: grab; touch-action: none; }
+.pv-wrap { position: relative; flex: 1; min-height: 0; display: grid; place-items: center; overflow: hidden; cursor: grab; touch-action: none; }
 .pv-wrap.grabbing { cursor: grabbing; }
 .pv-wrap.none { cursor: default; }
 #pv { display: block; background: var(--checker); box-shadow: 0 0 0 1px var(--cellline), 0 14px 32px -16px var(--shadow); }
+/* guides: placed with transforms by placeGuide(); only the crossing handle takes the pointer */
+.guide { position: absolute; inset: 0; pointer-events: none; }
+.guide-h, .guide-v, .guide-x { position: absolute; left: 0; top: 0; }
+.guide-h { width: 100%; height: 1px; background: var(--guide); }
+.guide-v { width: 1px; height: 100%; background: var(--guide); }
+.guide-x { width: 21px; height: 21px; margin: -10px 0 0 -10px; pointer-events: auto; cursor: move; touch-action: none; }
+.guide-x::after {   /* a hollow ring, so the pixel at the crossing stays visible */
+  content: ""; position: absolute; inset: 4px; border-radius: 50%;
+  border: 2px solid var(--guide); box-shadow: 0 0 0 1px var(--panel);
+}
+.guide-x:hover::after, .guide-x.on::after { inset: 2px; }
 .transport {
   flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding-block: 10px; padding-left: 16px; padding-right: 16px;

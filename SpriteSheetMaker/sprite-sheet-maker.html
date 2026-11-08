@@ -118,6 +118,12 @@
         </section>
 
         <section class="sec">
+          <div class="sec-head"><h2>Guides</h2><span class="mono muted" id="guide-pos"></span></div>
+          <label class="check"><input type="checkbox" id="guide-on"> Show crosshair</label>
+          <p class="hint">A horizontal and a vertical line that stay put while the frames change, to check that sprites line up. Drag the point where they cross to move both. Position is in cell pixels from the top left. Guides are never exported.</p>
+        </section>
+
+        <section class="sec">
           <h2>Shortcuts</h2>
           <dl class="keys">
             <dt>Space</dt><dd>Play / pause</dd>
@@ -177,6 +183,10 @@
       <div class="pv-wrap" id="pv-wrap" tabindex="0" aria-label="Current frame. Drag to reposition the sprite.">
         <canvas id="pv" width="1" height="1"></canvas>
         <p class="hint" id="pv-empty" hidden>Add sprites in the Main tab to preview them.</p>
+        <div class="guide" id="guide" hidden>
+          <i class="guide-h"></i><i class="guide-v"></i>
+          <div class="guide-x" id="guide-x" title="Drag to move the guides"></div>
+        </div>
       </div>
       <div class="transport">
         <button class="ibtn" id="btn-prev" type="button" aria-label="Previous frame" title="Previous frame ( , )">

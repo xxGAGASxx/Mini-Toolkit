@@ -16,6 +16,7 @@ const state = {
   global: { ...DEF },
   tab: 'main', frame: 0, playing: false, fps: 12,
   onionPrev: false, onionNext: false, onionN: 1, onionA: 35,
+  guide: false, gx: null, gy: null,   // preview crosshair, crossing at (gx, gy) in cell pixels; centered when first shown
   scale: 1, bg: '#ffffff', transparent: true, json: false,
 };
 let uid = 1, busy = false;
@@ -36,6 +37,8 @@ const els = {
   frameTitle: $('#frame-title'), frameInfo: $('#frame-info'),
   offX: $('#off-x'), offY: $('#off-y'), offReset: $('#off-reset'),
   onionPrev: $('#onion-prev'), onionNext: $('#onion-next'), onionN: $('#onion-n'), onionA: $('#onion-a'), onionAOut: $('#onion-a-out'),
+  guide: $('#guide'), guideH: $('#guide .guide-h'), guideV: $('#guide .guide-v'), guideX: $('#guide-x'),
+  guideOn: $('#guide-on'), guidePos: $('#guide-pos'),
   scale: $('#scale'), bg: $('#bg'), transp: $('#transp'), json: $('#ex-json'), exNote: $('#ex-note'), exportBtns: $$('.ex'),
 };
 
