@@ -37,7 +37,7 @@ function updateUI() {
   markAnchor(els.alignAll, state.align[0], state.align[1]);
   // color panel follows the selection
   const a = s ? s.adj : state.global;
-  for (const k of 'hsbc') {
+  for (const k of 'hsbct') {
     const inp = $('#adj-' + k);
     if (+inp.value !== a[k]) inp.value = a[k];
     $('#out-' + k).textContent = fmtAdj(k, a[k]);

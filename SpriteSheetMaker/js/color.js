@@ -1,9 +1,9 @@
 'use strict';
-// Per-sprite color adjustment: an affine color matrix (same math as CSS filters),
-// and the cache of processed canvases it produces.
+// Per-sprite color adjustment: an affine color matrix (same math as CSS filters) plus an
+// alpha factor for transparency, and the cache of processed canvases it produces.
 
-const DEF = { h: 0, s: 100, b: 100, c: 100 };
-const isId = (a) => a.h === 0 && a.s === 100 && a.b === 100 && a.c === 100;
+const DEF = { h: 0, s: 100, b: 100, c: 100, t: 0 };
+const isId = (a) => a.h === 0 && a.s === 100 && a.b === 100 && a.c === 100 && a.t === 0;
 
 function mul3(A, B) {
   const R = new Array(9);
@@ -25,18 +25,19 @@ function affine(a) {
   ];
   const M = mul3(S, H).map((v) => v * b * k);   // hue → saturation → brightness → contrast
   const o = 127.5 * (1 - k);
-  return { M, o: [o, o, o] };
+  return { M, o: [o, o, o], al: 1 - a.t / 100 };
 }
+// Transparencies stack: 50% on the sprite and 50% on all sprites leave it at 25% opacity.
 function compose(outer, inner) {
   const M = mul3(outer.M, inner.M);
   const o = [0, 1, 2].map((i) => outer.M[i * 3] * inner.o[0] + outer.M[i * 3 + 1] * inner.o[1] + outer.M[i * 3 + 2] * inner.o[2] + outer.o[i]);
-  return { M, o };
+  return { M, o, al: outer.al * inner.al };
 }
 function procOf(s) {
   if (!s.dirty) return s.proc;
   s.dirty = false;
   if (isId(state.global) && isId(s.adj)) return (s.proc = s.src);
-  const { M, o } = compose(affine(s.adj), affine(state.global));
+  const { M, o, al } = compose(affine(s.adj), affine(state.global));
   const cv = s.proc && s.proc !== s.src ? s.proc : mk(s.w, s.h);
   const ctx = cv.getContext('2d'), out = ctx.createImageData(s.w, s.h), d = s.data.data, q = out.data;
   const [m0, m1, m2, m3, m4, m5, m6, m7, m8] = M, [o0, o1, o2] = o;
@@ -45,7 +46,7 @@ function procOf(s) {
     q[i] = m0 * r + m1 * g + m2 * b + o0;
     q[i + 1] = m3 * r + m4 * g + m5 * b + o1;
     q[i + 2] = m6 * r + m7 * g + m8 * b + o2;
-    q[i + 3] = d[i + 3];
+    q[i + 3] = d[i + 3] * al;
   }
   ctx.putImageData(out, 0, 0);
   return (s.proc = cv);

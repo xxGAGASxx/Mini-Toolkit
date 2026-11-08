@@ -218,7 +218,7 @@ function endPan() { pan = null; document.body.classList.remove('panning'); }
 els.viewMain.addEventListener('lostpointercapture', endPan);
 
 /* ================= color inputs ================= */
-const ADJ_NAMES = { h: 'hue', s: 'saturation', b: 'brightness', c: 'contrast' };
+const ADJ_NAMES = { h: 'hue', s: 'saturation', b: 'brightness', c: 'contrast', t: 'transparency' };
 function applyAdj(k, v) {
   const s = selected();
   record(ADJ_NAMES[k], ['color'], () => {
@@ -227,7 +227,7 @@ function applyAdj(k, v) {
     else { state.global[k] = v; markAllDirty(); }
   }, `${k}:${s ? s.id : 'all'}`);
 }
-for (const k of 'hsbc') {
+for (const k of 'hsbct') {
   const inp = $('#adj-' + k);
   inp.addEventListener('input', () => applyAdj(k, +inp.value));
   inp.addEventListener('dblclick', () => { inp.value = DEF[k]; applyAdj(k, DEF[k]); });
