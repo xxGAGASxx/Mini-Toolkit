@@ -1,5 +1,5 @@
 'use strict';
-// Main tab: zoom, selection, drag to swap, arrange, grid and color inputs, align all.
+// Main tab: zoom, selection, drag to swap or insert, arrange, grid and color inputs, align all.
 
 function autoZoom() {
   const [cw, ch] = cell(), m = Math.max(cw, ch), cols = effCols();
@@ -10,8 +10,41 @@ function autoZoom() {
   els.zoom.value = String(z);
 }
 
-/* ================= selection, drag to swap ================= */
+/* ================= selection, drag to swap or insert ================= */
 function select(id) { state.sel = id; schedule(); }
+
+// Where a dragged sprite would land, worked out from the grid geometry.
+// Over the middle of a cell it swaps with that sprite: { i, side: 0 }.
+// Near a cell's left or right border, or in the gap beside it, it is inserted on that side
+// and the sprites in between shift over: { i, side: -1 | 1 }. Past the last sprite it moves to the end.
+// Drops that would change nothing give null.
+function dropTarget(cx, cy, from) {
+  const n = state.sprites.length, cols = effCols(), rows = Math.ceil(n / cols), z = state.zoom, [cw, ch] = cell();
+  const w = cw * z, h = ch * z, g = state.pad * z, edge = Math.min(w / 3, Math.max(6, w / 4));
+  const r = els.sheet.getBoundingClientRect(), x = cx - r.left, y = cy - r.top;
+  const row = Math.floor((y + g / 2) / (h + g));
+  if (row < 0 || row >= rows || x < -g / 2 - edge || x > r.width + g / 2 + edge) return null;
+  const col = clamp(Math.floor((x + g / 2) / (w + g)), 0, cols - 1), lx = x - col * (w + g);
+  let t = { i: row * cols + col, side: lx < edge ? -1 : lx > w - edge ? 1 : 0 };
+  if (t.i >= n) t = { i: n - 1, side: 1 };
+  const at = t.side > 0 ? t.i + 1 : t.i;
+  if (t.side ? at === from || at === from + 1 : t.i === from) return null;
+  return t;
+}
+// Swap: outline the target cell. Insert: a bar centered in the gap on that side of the cell.
+function showTarget(d, t) {
+  const cells = els.sheet.children, over = t && !t.side ? t.i : null;
+  if (over !== d.over) {
+    if (d.over != null && cells[d.over]) cells[d.over].classList.remove('over');
+    if (over != null) cells[over].classList.add('over');
+    d.over = over;
+  }
+  d.ins.hidden = !(t && t.side);
+  if (d.ins.hidden) return;
+  const r = cells[t.i].getBoundingClientRect(), g = state.pad * state.zoom;
+  d.ins.style.transform = `translate(${t.side < 0 ? r.left - g / 2 : r.right + g / 2}px, ${r.top}px)`;
+  d.ins.style.height = r.height + 8 + 'px';
+}
 
 let drag = null;
 els.sheet.addEventListener('pointerdown', (e) => {
@@ -19,7 +52,7 @@ els.sheet.addEventListener('pointerdown', (e) => {
   const cellEl = e.target.closest('.cell');
   if (!cellEl) return;
   e.preventDefault();
-  drag = { from: +cellEl.dataset.i, x: e.clientX, y: e.clientY, active: false, ghost: null, over: null, pid: e.pointerId };
+  drag = { from: +cellEl.dataset.i, x: e.clientX, y: e.clientY, active: false, ghost: null, ins: null, over: null, target: null, pid: e.pointerId };
 });
 window.addEventListener('pointermove', (e) => {
   if (!drag || e.pointerId !== drag.pid) return;
@@ -35,30 +68,31 @@ window.addEventListener('pointermove', (e) => {
     if (state.zoom >= 1) gc.className = 'px';
     g.className = 'ghost'; g.appendChild(gc); document.body.appendChild(g);
     drag.ghost = g;
+    drag.ins = document.createElement('div');
+    drag.ins.className = 'ins'; drag.ins.hidden = true;
+    document.body.appendChild(drag.ins);
     srcEl.classList.add('lift');
     document.body.classList.add('dragging');
   }
   drag.ghost.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
-  const t = document.elementFromPoint(e.clientX, e.clientY);
-  const tc = t && t.closest('.cell');
-  const over = tc && tc.parentNode === els.sheet ? +tc.dataset.i : null;
-  if (over !== drag.over) {
-    if (drag.over != null && els.sheet.children[drag.over]) els.sheet.children[drag.over].classList.remove('over');
-    drag.over = over;
-    if (over != null && over !== drag.from) els.sheet.children[over].classList.add('over');
-  }
+  drag.target = dropTarget(e.clientX, e.clientY, drag.from);
+  showTarget(drag, drag.target);
 });
 function endDrag(e, cancel) {
   if (!drag || (e && e.pointerId !== drag.pid)) return;
   const d = drag; drag = null;
   if (d.active) {
-    d.ghost.remove();
+    d.ghost.remove(); d.ins.remove();
     document.body.classList.remove('dragging');
     $$('.cell.lift, .cell.over').forEach((c) => c.classList.remove('lift', 'over'));
-    if (!cancel && d.over != null && d.over !== d.from) {
-      const a = state.sprites;
-      [a[d.from], a[d.over]] = [a[d.over], a[d.from]];
-      toast(`Swapped ${d.from + 1} and ${d.over + 1}`);
+    const t = cancel ? null : d.target, a = state.sprites;
+    if (t && !t.side) {
+      [a[d.from], a[t.i]] = [a[t.i], a[d.from]];
+      toast(`Swapped ${d.from + 1} and ${t.i + 1}`);
+    } else if (t) {
+      const at = t.side > 0 ? t.i + 1 : t.i, to = at > d.from ? at - 1 : at;
+      a.splice(to, 0, a.splice(d.from, 1)[0]);
+      toast(`Moved ${d.from + 1} to position ${to + 1}`);
     }
     schedule();
   } else if (!cancel && state.sprites[d.from]) {

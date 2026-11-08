@@ -216,6 +216,7 @@ button.chip.one { cursor: pointer; color: var(--accent); border-color: var(--acc
 /* ---------- overlays */
 .ghost { position: fixed; left: 0; top: 0; z-index: 60; pointer-events: none; }
 .ghost canvas { display: block; transform: translate(-50%, -50%) rotate(-3deg); background: var(--checker); box-shadow: 0 0 0 2px var(--accent), 0 12px 28px -8px var(--shadow); }
+.ins { position: fixed; left: 0; top: 0; z-index: 59; width: 4px; margin: -4px 0 0 -2px; border-radius: 2px; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); pointer-events: none; }
 body.dragging, body.dragging *, body.panning, body.panning * { cursor: grabbing !important; }
 .filedrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: var(--scrim); pointer-events: none; }
 .filedrop div { padding: 26px 34px; border: 2px dashed var(--accent); border-radius: 12px; background: var(--panel); font-weight: 650; font-size: 15px; }
