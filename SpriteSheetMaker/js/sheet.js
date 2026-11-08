@@ -46,20 +46,26 @@ function showTarget(d, t) {
   d.ins.style.height = r.height + 8 + 'px';
 }
 
+// The drag holds the sprite's id, not its index: a file import that finishes mid-drag can still
+// change the list (replacing the sample frames removes the dragged sprite), so the index is looked
+// up again whenever it is needed, and the drag is cancelled if the sprite is gone.
 let drag = null;
+const dragFrom = (d) => state.sprites.findIndex((s) => s.id === d.id);
 els.sheet.addEventListener('pointerdown', (e) => {
   if (e.button !== 0) return;
-  const cellEl = e.target.closest('.cell');
-  if (!cellEl) return;
+  const cellEl = e.target.closest('.cell'), s = cellEl && state.sprites[+cellEl.dataset.i];
+  if (!s) return;
   e.preventDefault();
-  drag = { from: +cellEl.dataset.i, x: e.clientX, y: e.clientY, active: false, ghost: null, ins: null, over: null, target: null, pid: e.pointerId };
+  drag = { id: s.id, x: e.clientX, y: e.clientY, active: false, ghost: null, ins: null, over: null, target: null, pid: e.pointerId };
 });
 window.addEventListener('pointermove', (e) => {
   if (!drag || e.pointerId !== drag.pid) return;
+  const from = dragFrom(drag);
+  if (from < 0) { endDrag(null, true); return; }
   if (!drag.active) {
     if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 5) return;
     drag.active = true;
-    const srcEl = els.sheet.children[drag.from], src = srcEl.firstChild;
+    const srcEl = els.sheet.children[from], src = srcEl.firstChild;
     const g = document.createElement('div'), gc = mk(src.width, src.height);
     gc.getContext('2d').drawImage(src, 0, 0);
     const k = Math.min(1, 120 / Math.max(parseFloat(src.style.width), parseFloat(src.style.height)));
@@ -75,28 +81,29 @@ window.addEventListener('pointermove', (e) => {
     document.body.classList.add('dragging');
   }
   drag.ghost.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
-  drag.target = dropTarget(e.clientX, e.clientY, drag.from);
+  drag.target = dropTarget(e.clientX, e.clientY, from);
   showTarget(drag, drag.target);
 });
 function endDrag(e, cancel) {
   if (!drag || (e && e.pointerId !== drag.pid)) return;
-  const d = drag; drag = null;
+  const d = drag, from = dragFrom(d); drag = null;
+  if (from < 0) cancel = true;   // the dragged sprite is gone
   if (d.active) {
     d.ghost.remove(); d.ins.remove();
     document.body.classList.remove('dragging');
     $$('.cell.lift, .cell.over').forEach((c) => c.classList.remove('lift', 'over'));
     const t = cancel ? null : d.target;
     if (t && !t.side) {
-      record('swap', ['order'], () => { const a = state.sprites; [a[d.from], a[t.i]] = [a[t.i], a[d.from]]; });
-      toast(`Swapped ${d.from + 1} and ${t.i + 1}`);
+      record('swap', ['order'], () => { const a = state.sprites; [a[from], a[t.i]] = [a[t.i], a[from]]; });
+      toast(`Swapped ${from + 1} and ${t.i + 1}`);
     } else if (t) {
-      const at = t.side > 0 ? t.i + 1 : t.i, to = at > d.from ? at - 1 : at;
-      record('move', ['order'], () => { const a = state.sprites; a.splice(to, 0, a.splice(d.from, 1)[0]); });
-      toast(`Moved ${d.from + 1} to position ${to + 1}`);
+      const at = t.side > 0 ? t.i + 1 : t.i, to = at > from ? at - 1 : at;
+      record('move', ['order'], () => { const a = state.sprites; a.splice(to, 0, a.splice(from, 1)[0]); });
+      toast(`Moved ${from + 1} to position ${to + 1}`);
     }
     schedule();
-  } else if (!cancel && state.sprites[d.from]) {
-    select(state.sprites[d.from].id);
+  } else if (!cancel) {
+    select(d.id);
   }
 }
 window.addEventListener('pointerup', (e) => endDrag(e, false));
@@ -134,6 +141,10 @@ function removeSel() {
 els.dup.addEventListener('click', duplicate);
 els.del.addEventListener('click', removeSel);
 els.rev.addEventListener('click', () => { record('reverse order', ['order'], () => { state.sprites.reverse(); }); toast('Reversed the order'); });
+
+/* ================= clear all ================= */
+// Two clicks, since it can't be undone: it also empties the undo history, so the cleared
+// sprites' pixels aren't kept alive by old steps.
 let clearArmed = 0;
 els.clear.addEventListener('click', () => {
   if (!clearArmed) {
@@ -143,7 +154,9 @@ els.clear.addEventListener('click', () => {
     return;
   }
   disarmClear();
-  record('clear all', ['order'], () => { state.sprites = []; state.sel = null; state.frame = 0; });
+  state.sprites = []; state.sel = null; state.frame = 0;
+  clearHistory();
+  toast('Cleared all sprites');
 });
 function disarmClear() { clearTimeout(clearArmed); clearArmed = 0; els.clear.textContent = 'Clear all'; els.clear.classList.remove('armed'); }
 

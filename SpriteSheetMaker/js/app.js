@@ -39,8 +39,9 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (state.tab === 'main') {
-    if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel != null) { e.preventDefault(); removeSel(); }
-    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(); }
+    // Like undo, Delete and Ctrl+D wait until no sprite is being dragged.
+    if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel != null) { e.preventDefault(); if (!drag) removeSel(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); if (!drag) duplicate(); }
     else if (e.key === 'Escape') select(null);
     return;
   }

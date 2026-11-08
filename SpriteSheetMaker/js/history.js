@@ -1,5 +1,6 @@
 'use strict';
-// Undo / redo for Align all sprites, Arrange and Color. Nothing else is recorded.
+// Undo / redo for Align all sprites, Arrange and Color. Nothing else is recorded; Clear all
+// empties the history instead.
 //
 // Each step keeps before/after snapshots of only the parts it changes:
 //   order  the sprite list (sprites are shared, not copied: their pixels never change)
@@ -7,7 +8,7 @@
 //   color  state.global and every sprite's color adjustment
 // plus the selection. Undo and redo leave alone what unrecorded edits did in the meantime:
 // sprites added since stay (at the end), and a sprite nudged or aligned in Preview since keeps
-// its position. Replacing or removing the sample frames starts a new history (clearHistory).
+// its position. Clear all, and replacing or removing the sample frames, start a new history (clearHistory).
 
 const HISTORY_MAX = 100;
 const hist = { undo: [], redo: [], open: null };   // open: the newest step, while it can still absorb changes
