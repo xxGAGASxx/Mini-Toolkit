@@ -28,3 +28,9 @@ Tools marked **Needs internet** load a library from a CDN (cdn.jsdelivr.net / un
 ### 3D Debug Viewer
 - 3D Mesh debug modes
 - **Needs internet** for the whole tool (loads three.js)
+
+### Diagram Editor
+- Draw diagrams with shapes, connected arrows, text, icons and images
+- Save / open as JSON, export PNG / JPG / SVG
+- Built-in icon library, or load your own icon folder
+- See [Diagram-Editor/README.md](Diagram-Editor/README.md) for details and keyboard shortcuts
