@@ -53,3 +53,14 @@ Tools marked **Needs internet** load a library from a CDN (cdn.jsdelivr.net / un
 - Color, Effects and Tiling stay live on top of the image until you export; Bake applies them for good. Undo / redo for everything
 - Export PNG, JPEG, WebP, BMP, TGA. PNG, BMP and TGA keep exact colors under transparent pixels. Opens TGA files too
 - Open `TextureTools/texture-tools.html`. Works offline
+
+### Audio Tools
+- Edit: cut, copy, paste, delete, trim to selection, silence, insert silence, reverse, fade in / out, volume, normalize, mono / stereo / swap channels
+- Split: mark clip boundaries without removing audio, split at silences (optionally removing them), trim silence at both ends; export each region as its own file in a ZIP
+- Effects: reverb (presets from small room to cathedral, plus reverse reverb), delay (regular, ping-pong, bouncing ball, reverse, with pitch change per repeat), echo, distortion (11 types, 4× oversampled), compressor / limiter
+- Speed & pitch: change speed while keeping pitch (or like a tape), stretch to an exact length, shift pitch while keeping speed, with an option to keep a voice's character
+- Clean up: noise reduction (learn the noise from a selection, or estimate it automatically), hum removal (50 / 60 Hz, found automatically), low / high cut
+- Preview any tool before applying it; it re-renders as you move the sliders. Tools work on the selection, or the whole file. Undo / redo for everything
+- Opens WAV, AIFF, MP3, OGG, Opus, FLAC, M4A / AAC and the sound of MP4 / WebM videos at their own sample rate. WAV cue points become splits
+- Export WAV (16 / 24-bit, 32-bit float, splits saved as cue points), FLAC, MP3, Opus (.ogg), at any common sample rate, mono or stereo
+- Open `AudioTools/audio-tools.html`. Works offline. Includes two libraries in `AudioTools/vendor/`: Signalsmith Stretch (MIT) for speed and pitch, and lamejs (LGPL) for MP3; see `AudioTools/vendor/README.md`

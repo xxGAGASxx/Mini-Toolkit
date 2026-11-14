@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Audio Tools</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>Audio Tools</div>
+  <div class="hist">
+    <button class="ibtn" id="btn-undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"/></svg>
+    </button>
+    <button class="ibtn" id="btn-redo" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.5 3.5 0 0 0 0 7h2.5"/></svg>
+    </button>
+  </div>
+  <div class="filebtns">
+    <button class="btn" id="btn-open" type="button" title="Open an audio file (Ctrl+O). You can also drop one on the page.">Open…</button>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="job" id="job" role="status" aria-live="polite" hidden>
+    <span id="job-label">Working…</span>
+    <span class="bar"><i id="job-bar"></i></span>
+    <button class="btn sm" id="job-cancel" type="button" title="Stop this (Esc)">Cancel</button>
+  </div>
+</header>
+
+<div class="app">
+  <main class="center">
+    <div class="vbar">
+      <div class="transport">
+        <button class="btn icon play" id="t-play" type="button" aria-label="Play" title="Play the selection, or from the cursor; again to stop (Space)">
+          <svg class="i-play" viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg>
+          <svg class="i-stop" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1"/></svg>
+        </button>
+        <button class="btn icon" id="t-start" type="button" aria-label="Cursor to start" title="Cursor to the start (Home)">
+          <svg viewBox="0 0 16 16"><path d="M4 3.5v9M12.5 3.5 6 8l6.5 4.5z"/></svg>
+        </button>
+        <button class="btn icon" id="t-loop" type="button" aria-label="Loop" aria-pressed="false" title="Loop playback and previews (L)">
+          <svg viewBox="0 0 16 16"><path d="M3 9V7.5A2.5 2.5 0 0 1 5.5 5H12M10 3l2.2 2L10 7M13 7v1.5A2.5 2.5 0 0 1 10.5 11H4M6 13l-2.2-2L6 9"/></svg>
+        </button>
+      </div>
+      <div class="times">
+        <span class="mono tpos" id="t-pos">0:00.000</span>
+        <span class="mono muted" id="t-sel"></span>
+      </div>
+      <span class="mono muted thover" id="t-hover"></span>
+      <div class="zoom">
+        <button class="btn sm" id="z-fit" type="button" title="Show the whole file (F)">Fit</button>
+        <button class="btn sm" id="z-sel" type="button" title="Zoom to the selection (Z)">Selection</button>
+        <button class="btn sm icon" id="z-out" type="button" aria-label="Zoom out" title="Zoom out (−)">−</button>
+        <button class="btn sm icon" id="z-in" type="button" aria-label="Zoom in" title="Zoom in (+)">+</button>
+      </div>
+    </div>
+    <div class="vp" id="vp">
+      <canvas id="wave" tabindex="0" aria-label="Waveform. Drag to select, wheel to zoom, Shift+wheel to scroll."></canvas>
+      <div class="empty" id="empty">
+        <div class="empty-card">
+          <p class="empty-title">Open an audio file to start</p>
+          <p class="hint">WAV, MP3, OGG, Opus, FLAC, AIFF, M4A / AAC, or the sound of an MP4 / WebM video. Drop a file here, or:</p>
+          <button class="btn primary" id="e-open" type="button">Open audio…</button>
+          <div class="btns">
+            <button class="btn" id="e-beat" type="button" title="A two-bar drum loop with bass, in stereo">Sample: beat</button>
+            <button class="btn" id="e-noisy" type="button" title="Three sung-like phrases with hiss, hum and silent gaps">Sample: noisy voice</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="ovw-wrap"><canvas id="ovw" aria-label="Overview of the whole file. Click to move the view there."></canvas></div>
+  </main>
+
+  <aside class="side">
+    <div class="ttabs" role="tablist" aria-label="Tools">
+      <button role="tab" type="button" id="tab-edit" aria-controls="pan-edit" data-tab="edit">Edit</button>
+      <button role="tab" type="button" id="tab-effects" aria-controls="pan-effects" data-tab="effects">Effects</button>
+      <button role="tab" type="button" id="tab-time" aria-controls="pan-time" data-tab="time">Speed &amp; pitch</button>
+      <button role="tab" type="button" id="tab-clean" aria-controls="pan-clean" data-tab="clean">Clean up</button>
+    </div>
+
+    <div class="side-scroll">
+      <p class="hint note" id="target"></p>
+
+      <!-- EDIT -->
+      <div class="tpanel" role="tabpanel" id="pan-edit" aria-labelledby="tab-edit">
+        <section class="sec">
+          <h2>Selection</h2>
+          <div class="grid3">
+            <label class="fld">Start<input type="text" id="sel-start" data-time="a" spellcheck="false" autocomplete="off"></label>
+            <label class="fld">End<input type="text" id="sel-end" data-time="b" spellcheck="false" autocomplete="off"></label>
+            <label class="fld">Length<input type="text" id="sel-len" data-time="len" spellcheck="false" autocomplete="off"></label>
+          </div>
+          <div class="chips">
+            <button class="chip" type="button" data-act="selall" title="Ctrl+A">All</button>
+            <button class="chip" type="button" data-act="selnone" data-need="sel" title="Esc">None</button>
+            <button class="chip" type="button" data-act="selregion" title="Select the region (between splits) under the cursor">Region at cursor</button>
+            <button class="chip" type="button" data-act="zoomsel" data-need="sel" title="Z">Zoom to it</button>
+          </div>
+          <p class="hint">Drag on the waveform to select; drag its edges to adjust; Shift+click extends. Double-click selects the region between splits. Times can be typed as 1:23.4, 83.4 or 500ms.</p>
+        </section>
+
+        <section class="sec">
+          <h2>Cut, copy, paste</h2>
+          <div class="btns3">
+            <button class="btn" type="button" data-act="cut" data-need="sel">Cut <small>Ctrl+X</small></button>
+            <button class="btn" type="button" data-act="copy" data-need="sel">Copy <small>Ctrl+C</small></button>
+            <button class="btn" type="button" data-act="paste" data-need="clip">Paste <small>Ctrl+V</small></button>
+            <button class="btn" type="button" data-act="delete" data-need="sel">Delete <small>Del</small></button>
+            <button class="btn" type="button" data-act="trim" data-need="sel" title="Keep only the selection, remove the rest">Trim <small>Ctrl+T</small></button>
+            <button class="btn" type="button" data-act="silence" data-need="sel" title="Replace the selection with silence">Silence <small>Ctrl+L</small></button>
+          </div>
+          <p class="hint" id="clip-info"></p>
+          <div class="inline-row">
+            <label class="sl"><span>Insert silence</span><input type="range" data-p="silence.len" min="0.1" max="10" step="0.1"><output data-f="s"></output></label>
+            <button class="btn sm" type="button" data-act="insert" title="Insert this much silence at the cursor (or before the selection)">Insert</button>
+          </div>
+        </section>
+
+        <section class="sec">
+          <div class="sec-head"><h2>Split</h2><span class="mono muted" id="split-info"></span></div>
+          <div class="btns">
+            <button class="btn" type="button" data-act="split" title="Mark a clip boundary at the cursor, or at both ends of the selection (S)">Split at cursor <small>S</small></button>
+            <button class="btn" type="button" data-act="unsplit" title="Remove the splits inside the selection, or all of them">Remove splits</button>
+          </div>
+          <p class="hint">A split marks a clip boundary without removing any audio. Drag its handle on the ruler to move it, double-click the handle to remove it. Export can save each region as its own file.</p>
+          <h3>Split at silences</h3>
+          <label class="sl"><span>Silence below</span><input type="range" data-p="split.thresh" min="-80" max="-10" step="1"><output data-f="db"></output></label>
+          <label class="sl"><span>At least</span><input type="range" data-p="split.minSil" min="50" max="3000" step="10"><output data-f="ms"></output></label>
+          <label class="check"><input type="checkbox" data-p="split.remove">Remove the silences too</label>
+          <label class="sl" data-show="p:split.remove=true"><span>Keep around</span><input type="range" data-p="split.pad" min="0" max="500" step="5"><output data-f="ms"></output></label>
+          <button class="btn primary" type="button" data-act="autosplit">Split at silences</button>
+          <p class="hint">Finds the quiet gaps and splits in the middle of each. Handy for cutting a recording of many sounds or lines into separate clips.</p>
+        </section>
+
+        <section class="sec">
+          <h2>Trim silence</h2>
+          <label class="sl"><span>Silence below</span><input type="range" data-p="trim.thresh" min="-90" max="-10" step="1"><output data-f="db"></output></label>
+          <label class="sl"><span>Keep</span><input type="range" data-p="trim.pad" min="0" max="500" step="5"><output data-f="ms"></output></label>
+          <button class="btn" type="button" data-act="trimsil">Trim silence at the start and end</button>
+        </section>
+
+        <section class="sec">
+          <h2>Reverse</h2>
+          <button class="btn" type="button" data-act="reverse">Reverse</button>
+          <p class="hint">Plays the selection (or the whole file) backwards. For a reverse-reverb swell, turn on Reverse in Effects › Reverb.</p>
+        </section>
+
+        <section class="sec">
+          <h2>Fade</h2>
+          <div class="grid2">
+            <label class="fld">Curve
+              <select data-p="fade.curve">
+                <option value="smooth">Smooth (S-curve)</option>
+                <option value="linear">Linear</option>
+                <option value="fast">Fast (equal power)</option>
+                <option value="slow">Slow</option>
+              </select>
+            </label>
+            <label class="fld">Length without selection
+              <select data-p="fade.len" data-num>
+                <option value="0.05">50 ms</option>
+                <option value="0.25">0.25 s</option>
+                <option value="0.5">0.5 s</option>
+                <option value="1">1 s</option>
+                <option value="2">2 s</option>
+                <option value="5">5 s</option>
+              </select>
+            </label>
+          </div>
+          <div class="btns">
+            <button class="btn" type="button" data-act="fadein">Fade in</button>
+            <button class="btn" type="button" data-act="fadeout">Fade out</button>
+          </div>
+          <p class="hint">Fades across the selection. With nothing selected, fades the start or the end of the file.</p>
+        </section>
+
+        <section class="sec">
+          <div class="sec-head"><h2>Volume</h2><span class="mono muted" id="level-info"></span></div>
+          <div class="inline-row">
+            <label class="sl"><span>Change by</span><input type="range" data-p="gain.db" min="-24" max="24" step="0.5"><output data-f="db"></output></label>
+            <button class="btn sm" type="button" data-act="gain">Apply</button>
+          </div>
+          <div class="inline-row">
+            <label class="sl"><span>Peak to</span><input type="range" data-p="norm.peak" min="-24" max="0" step="0.1"><output data-f="db"></output></label>
+            <button class="btn sm" type="button" data-act="normalize">Normalize</button>
+          </div>
+          <label class="check"><input type="checkbox" data-p="norm.sep">Normalize each channel on its own</label>
+        </section>
+
+        <section class="sec">
+          <h2>Channels</h2>
+          <div class="btns3">
+            <button class="btn" type="button" data-act="mono">To mono</button>
+            <button class="btn" type="button" data-act="stereo">To stereo</button>
+            <button class="btn" type="button" data-act="swap">Swap L / R</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- EFFECTS -->
+      <div class="tpanel" role="tabpanel" id="pan-effects" aria-labelledby="tab-effects" hidden>
+        <div class="subtabs" data-group="fxTab" aria-label="Effect">
+          <button class="chip" type="button" data-sub="reverb">Reverb</button>
+          <button class="chip" type="button" data-sub="delay">Delay</button>
+          <button class="chip" type="button" data-sub="echo">Echo</button>
+          <button class="chip" type="button" data-sub="dist">Distortion</button>
+          <button class="chip" type="button" data-sub="comp">Compressor</button>
+        </div>
+
+        <section class="sec" data-subpanel="reverb">
+          <h2>Reverb</h2>
+          <label class="fld">Preset
+            <select data-p="reverb.preset">
+              <option value="small">Small room</option>
+              <option value="room">Room</option>
+              <option value="hall">Hall</option>
+              <option value="cathedral">Cathedral</option>
+              <option value="plate">Plate</option>
+              <option value="huge">Huge space</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label class="sl"><span>Room size</span><input type="range" data-p="reverb.size" min="0" max="100"><output data-f="pct"></output></label>
+          <label class="sl"><span>Decay</span><input type="range" data-p="reverb.decay" min="0.1" max="12" step="0.05"><output data-f="s"></output></label>
+          <label class="sl"><span>Pre-delay</span><input type="range" data-p="reverb.predelay" min="0" max="200"><output data-f="ms"></output></label>
+          <label class="sl"><span>Damping</span><input type="range" data-p="reverb.damp" min="0" max="100"><output data-f="pct"></output></label>
+          <label class="sl"><span>Width</span><input type="range" data-p="reverb.width" min="0" max="100"><output data-f="pct"></output></label>
+          <label class="sl"><span>Mix</span><input type="range" data-p="reverb.mix" min="0" max="100"><output data-f="pct"></output></label>
+          <label class="check"><input type="checkbox" data-p="reverb.reverse">Reverse (the reverb swells in before the sound)</label>
+          <p class="hint">Decay is how long the reverb takes to die away (to −60 dB). Damping makes it darker as it fades. Mix 100% is reverb only. The tail rings on past the selection.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="reverb"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="reverb">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec" data-subpanel="delay">
+          <h2>Delay</h2>
+          <label class="fld">Kind
+            <select data-p="delay.mode">
+              <option value="regular">Regular</option>
+              <option value="pingpong">Ping-pong (bounces left and right)</option>
+              <option value="bounce">Bouncing ball (repeats speed up)</option>
+              <option value="reverse">Reverse (repeats play backwards)</option>
+            </select>
+          </label>
+          <label class="sl"><span>Time</span><input type="range" data-p="delay.time" min="10" max="2000" step="5"><output data-f="ms"></output></label>
+          <label class="sl"><span>Feedback</span><input type="range" data-p="delay.feedback" min="0" max="95"><output data-f="pct"></output></label>
+          <label class="sl"><span>Pitch per repeat</span><input type="range" data-p="delay.pitch" min="-12" max="12" step="1"><output data-f="st"></output></label>
+          <label class="sl"><span>Tone</span><input type="range" data-p="delay.tone" data-log="500,20000" min="0" max="1000"><output data-f="tone"></output></label>
+          <label class="sl"><span>Mix</span><input type="range" data-p="delay.mix" min="0" max="100"><output data-f="pct"></output></label>
+          <p class="hint">Feedback sets how many repeats you hear. Pitch per repeat makes each one climb or fall (12 st is an octave). Tone darkens the repeats; all the way right is off. Ping-pong needs a stereo file.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="delay"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="delay">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec" data-subpanel="echo">
+          <h2>Echo</h2>
+          <label class="sl"><span>Delay time</span><input type="range" data-p="echo.time" min="20" max="2000" step="5"><output data-f="ms"></output></label>
+          <label class="sl"><span>Decay</span><input type="range" data-p="echo.decay" min="5" max="95"><output data-f="pct"></output></label>
+          <label class="sl"><span>Echoes</span><input type="range" data-p="echo.count" min="1" max="20"><output data-f="int"></output></label>
+          <label class="sl"><span>Tone</span><input type="range" data-p="echo.tone" data-log="500,20000" min="0" max="1000"><output data-f="tone"></output></label>
+          <label class="sl"><span>Mix</span><input type="range" data-p="echo.mix" min="0" max="100"><output data-f="pct"></output></label>
+          <p class="hint">Each echo comes Delay time after the one before, at Decay times its loudness: 50% halves it every time.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="echo"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="echo">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec" data-subpanel="dist">
+          <h2>Distortion</h2>
+          <label class="fld">Type<select data-p="dist.type" id="dist-type"></select></label>
+          <label class="sl"><span>Drive</span><input type="range" data-p="dist.drive" min="0" max="40" step="0.5"><output data-f="dbu"></output></label>
+          <label class="sl" data-show="p:dist.type=crush"><span>Bits</span><input type="range" data-p="dist.bits" min="1" max="16"><output data-f="bits"></output></label>
+          <label class="sl" data-show="p:dist.type=rate"><span>Sample rate</span><input type="range" data-p="dist.rate" data-log="200,22050" min="0" max="1000"><output data-f="hz"></output></label>
+          <label class="sl"><span>Tone</span><input type="range" data-p="dist.tone" data-log="500,20000" min="0" max="1000"><output data-f="tone"></output></label>
+          <label class="sl"><span>Output</span><input type="range" data-p="dist.out" min="-24" max="12" step="0.5"><output data-f="db"></output></label>
+          <label class="sl"><span>Mix</span><input type="range" data-p="dist.mix" min="0" max="100"><output data-f="pct"></output></label>
+          <label class="check"><input type="checkbox" data-p="dist.level">Keep loudness (Drive changes the sound, not the volume)</label>
+          <p class="hint">Runs at 4× the sample rate, so heavy settings stay clean of harsh aliasing (except Bitcrusher and Sample rate reducer, where that grit is the point).</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="dist"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="dist">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec" data-subpanel="comp">
+          <h2>Compressor</h2>
+          <div class="comp-top">
+            <div class="comp-fields">
+              <label class="fld">Preset
+                <select data-p="comp.preset">
+                  <option value="gentle">Gentle</option>
+                  <option value="vocal">Voice</option>
+                  <option value="punch">Punchy drums</option>
+                  <option value="heavy">Heavy</option>
+                  <option value="parallel">Parallel (New York)</option>
+                  <option value="limiter">Limiter</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+              <label class="check"><input type="checkbox" data-p="comp.auto">Auto makeup gain</label>
+            </div>
+            <canvas id="comp-curve" class="curve" aria-label="Compression curve: input level across, output level up"></canvas>
+          </div>
+          <label class="sl"><span>Threshold</span><input type="range" data-p="comp.threshold" min="-60" max="0" step="0.5"><output data-f="db"></output></label>
+          <label class="sl"><span>Ratio</span><input type="range" data-p="comp.ratio" min="1" max="20" step="0.5"><output data-f="ratio"></output></label>
+          <label class="sl"><span>Knee</span><input type="range" data-p="comp.knee" min="0" max="24" step="0.5"><output data-f="dbu"></output></label>
+          <label class="sl"><span>Attack</span><input type="range" data-p="comp.attack" data-log="0.1,200" min="0" max="1000"><output data-f="ms"></output></label>
+          <label class="sl"><span>Release</span><input type="range" data-p="comp.release" data-log="5,2000" min="0" max="1000"><output data-f="ms"></output></label>
+          <label class="sl"><span>Look-ahead</span><input type="range" data-p="comp.lookahead" min="0" max="20" step="0.5"><output data-f="ms"></output></label>
+          <label class="sl" data-show="p:comp.auto=false"><span>Makeup</span><input type="range" data-p="comp.makeup" min="0" max="24" step="0.5"><output data-f="db"></output></label>
+          <label class="sl"><span>Mix</span><input type="range" data-p="comp.mix" min="0" max="100"><output data-f="pct"></output></label>
+          <p class="hint">Sounds louder than Threshold are turned down by Ratio (4 : 1 lets 1 dB out for every 4 dB over). Auto makeup raises the result back to the original peak, so quiet parts end up louder. Look-ahead catches sudden hits. Ratio all the way right is a limiter.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="comp"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="comp">Apply</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- SPEED & PITCH -->
+      <div class="tpanel" role="tabpanel" id="pan-time" aria-labelledby="tab-time" hidden>
+        <section class="sec">
+          <div class="sec-head"><h2>Speed</h2><span class="mono muted" id="speed-info"></span></div>
+          <label class="sl"><span>Speed</span><input type="range" data-p="speed.pct" min="25" max="400" step="0.1"><output data-f="speed"></output></label>
+          <div class="chips">
+            <button class="chip" type="button" data-set="speed.pct=50">50%</button>
+            <button class="chip" type="button" data-set="speed.pct=75">75%</button>
+            <button class="chip" type="button" data-set="speed.pct=90">90%</button>
+            <button class="chip" type="button" data-set="speed.pct=110">110%</button>
+            <button class="chip" type="button" data-set="speed.pct=125">125%</button>
+            <button class="chip" type="button" data-set="speed.pct=150">150%</button>
+            <button class="chip" type="button" data-set="speed.pct=200">200%</button>
+          </div>
+          <label class="fld">Or make it this long
+            <input type="text" id="speed-target" placeholder="e.g. 2.5 or 0:02.500" spellcheck="false" autocomplete="off">
+          </label>
+          <label class="check"><input type="checkbox" data-p="speed.keep">Keep the pitch</label>
+          <p class="hint">With Keep the pitch on, only the timing changes. Off, it speeds up or slows down like a tape: higher and faster, or lower and slower. Typing a length is handy for fitting a sound to an animation.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="speed"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="speed">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec">
+          <h2>Pitch</h2>
+          <label class="sl"><span>Semitones</span><input type="range" data-p="pitch.semis" min="-24" max="24" step="1"><output data-f="st"></output></label>
+          <label class="sl"><span>Fine</span><input type="range" data-p="pitch.cents" min="-100" max="100" step="1"><output data-f="ct"></output></label>
+          <div class="chips">
+            <button class="chip" type="button" data-set="pitch.semis=-12">−12 (octave down)</button>
+            <button class="chip" type="button" data-set="pitch.semis=-5">−5</button>
+            <button class="chip" type="button" data-set="pitch.semis=5">+5</button>
+            <button class="chip" type="button" data-set="pitch.semis=12">+12 (octave up)</button>
+          </div>
+          <label class="check"><input type="checkbox" data-p="pitch.formants">Keep the voice character (formants)</label>
+          <p class="hint">Changes the pitch and keeps the length. For voices, Keep the voice character avoids the chipmunk or giant effect.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="pitch"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="pitch">Apply</button>
+          </div>
+        </section>
+      </div>
+
+      <!-- CLEAN UP -->
+      <div class="tpanel" role="tabpanel" id="pan-clean" aria-labelledby="tab-clean" hidden>
+        <div class="subtabs" data-group="cleanTab" aria-label="Clean-up tool">
+          <button class="chip" type="button" data-sub="nr">Noise reduction</button>
+          <button class="chip" type="button" data-sub="hum">Hum</button>
+          <button class="chip" type="button" data-sub="filt">Low / high cut</button>
+        </div>
+
+        <section class="sec" data-subpanel="nr">
+          <h2>Noise reduction</h2>
+          <p class="hint" id="nr-profile"></p>
+          <div class="btns">
+            <button class="btn" type="button" data-act="learn" data-need="sel" title="Select a part with only the noise (no voice or music), then press this">Learn noise from selection</button>
+            <button class="btn" type="button" data-act="forget" id="nr-forget">Forget the profile</button>
+          </div>
+          <label class="sl"><span>Reduction</span><input type="range" data-p="nr.reduce" min="0" max="40" step="1"><output data-f="dbu"></output></label>
+          <label class="sl"><span>Sensitivity</span><input type="range" data-p="nr.sens" min="-6" max="18" step="0.5"><output data-f="db"></output></label>
+          <label class="sl"><span>Smoothing</span><input type="range" data-p="nr.smooth" min="0" max="12" step="1"><output data-f="bands"></output></label>
+          <label class="sl"><span>Release</span><input type="range" data-p="nr.release" data-log="10,500" min="0" max="1000"><output data-f="ms"></output></label>
+          <label class="check"><input type="checkbox" data-p="nr.residual">Output only what gets removed (to check)</label>
+          <p class="hint">Removes steady noise such as hiss, fan, air conditioning or buzz. For best results, first select a second or so of just the noise and press Learn. Reduction is how far the noise goes down; higher Sensitivity removes more but can make the sound watery. If you hear voice or music in "only what gets removed", lower Sensitivity.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="nr"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="nr">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec" data-subpanel="hum">
+          <h2>Hum removal</h2>
+          <label class="fld">Mains frequency
+            <select data-p="hum.base">
+              <option value="auto">Find it automatically</option>
+              <option value="50">50 Hz (Europe, Asia, Africa, Australia)</option>
+              <option value="60">60 Hz (the Americas, parts of Asia)</option>
+            </select>
+          </label>
+          <label class="sl"><span>Harmonics</span><input type="range" data-p="hum.harmonics" min="1" max="10"><output data-f="int"></output></label>
+          <label class="sl"><span>Notch width</span><input type="range" data-p="hum.width" min="0.5" max="10" step="0.5"><output data-f="hz"></output></label>
+          <p class="hint">Cuts the electrical hum and its overtones with very narrow notches, leaving everything else. Raise Harmonics if a buzz remains.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="hum"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="hum">Apply</button>
+          </div>
+        </section>
+
+        <section class="sec" data-subpanel="filt">
+          <h2>Low / high cut</h2>
+          <label class="check"><input type="checkbox" data-p="filt.lowOn">Low cut (removes rumble, wind, handling noise)</label>
+          <label class="sl"><span>Below</span><input type="range" data-p="filt.low" data-log="20,1000" min="0" max="1000"><output data-f="hz"></output></label>
+          <label class="check"><input type="checkbox" data-p="filt.highOn">High cut (softens hiss and harshness)</label>
+          <label class="sl"><span>Above</span><input type="range" data-p="filt.high" data-log="1000,20000" min="0" max="1000"><output data-f="hz"></output></label>
+          <label class="fld">Slope
+            <select data-p="filt.slope" data-num>
+              <option value="12">12 dB per octave (gentle)</option>
+              <option value="24">24 dB per octave (steep)</option>
+            </select>
+          </label>
+          <p class="hint">Both on with Below near 300 Hz and Above near 3 kHz gives a telephone or radio sound.</p>
+          <div class="btns">
+            <button class="btn" type="button" data-preview="filt"><svg viewBox="0 0 16 16"><path d="M5 3.2v9.6L12.6 8z"/></svg><span>Preview</span></button>
+            <button class="btn primary" type="button" data-apply="filt">Apply</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- EXPORT: outside the tabs, always here -->
+    <section class="sec export">
+      <div class="sec-head"><h2>Export</h2><span class="mono muted" id="ex-size"></span></div>
+      <div class="grid2">
+        <label class="fld">Format
+          <select data-x="fmt" id="ex-fmt">
+            <option value="wav">WAV</option>
+            <option value="flac">FLAC (lossless, smaller)</option>
+            <option value="mp3">MP3</option>
+            <option value="opus">Opus (.ogg)</option>
+          </select>
+        </label>
+        <label class="fld">Quality
+          <select data-x="wavBits" data-show="x:fmt=wav">
+            <option value="16">16-bit</option>
+            <option value="24">24-bit</option>
+            <option value="32">32-bit float</option>
+          </select>
+          <select data-x="flacBits" data-show="x:fmt=flac">
+            <option value="16">16-bit</option>
+            <option value="24">24-bit</option>
+          </select>
+          <select data-x="mp3Kbps" data-show="x:fmt=mp3">
+            <option value="128">128 kbps</option>
+            <option value="192">192 kbps</option>
+            <option value="256">256 kbps</option>
+            <option value="320">320 kbps</option>
+          </select>
+          <select data-x="opusKbps" data-show="x:fmt=opus">
+            <option value="64">64 kbps</option>
+            <option value="96">96 kbps</option>
+            <option value="128">128 kbps</option>
+            <option value="192">192 kbps</option>
+          </select>
+        </label>
+        <label class="fld">Sample rate
+          <select data-x="rate">
+            <option value="0">Same as the file</option>
+            <option value="96000">96 kHz</option>
+            <option value="48000">48 kHz</option>
+            <option value="44100">44.1 kHz</option>
+            <option value="32000">32 kHz</option>
+            <option value="22050">22.05 kHz</option>
+            <option value="16000">16 kHz</option>
+            <option value="11025">11.025 kHz</option>
+          </select>
+        </label>
+        <label class="fld">Channels
+          <select data-x="chans">
+            <option value="same">Same as the file</option>
+            <option value="mono">Mono</option>
+            <option value="stereo">Stereo</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid2">
+        <label class="fld">Export
+          <select data-x="what" id="ex-what">
+            <option value="all">Whole file</option>
+            <option value="sel">Selection</option>
+            <option value="regions">Each region (ZIP)</option>
+          </select>
+        </label>
+        <label class="fld">File name
+          <span class="namerow"><input type="text" data-x="name" id="ex-name" spellcheck="false" autocomplete="off"><span class="mono muted" id="ex-ext">.wav</span></span>
+        </label>
+      </div>
+      <label class="check" id="ex-dither-row" title="Adds a whisper of noise that turns quantization distortion in quiet fades into smooth hiss"><input type="checkbox" data-x="dither">Dither (recommended for 16-bit)</label>
+      <p class="hint" id="ex-note" hidden></p>
+      <button class="btn primary" id="ex-save" type="button" title="Save the file (Ctrl+E)">Export <small>Ctrl+E</small></button>
+    </section>
+  </aside>
+</div>
+
+<input type="file" id="file" accept="audio/*,video/mp4,video/webm,.wav,.mp3,.ogg,.oga,.opus,.flac,.aif,.aiff,.aifc,.m4a,.aac,.webm,.mp4" hidden>
+<div class="filedrop" id="drop" hidden><div>Drop an audio file to open it</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Plain scripts, not modules, so the page works opened straight from disk.
+     Order matters: libraries and helpers first, the app last. -->
+<script src="vendor/signalsmith-stretch.js"></script>
+<script src="vendor/lame.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/dsp.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/timepitch.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/cleanup.js"></script>
+<script src="js/encode.js"></script>
+<script src="js/state.js"></script>
+<script src="js/edit.js"></script>
+<script src="js/player.js"></script>
+<script src="js/view.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
