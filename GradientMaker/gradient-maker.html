@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gradient Maker</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true"></span>Gradient Maker</div>
+  <div class="hist">
+    <button class="ibtn" id="btn-undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"/></svg>
+    </button>
+    <button class="ibtn" id="btn-redo" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.5 3.5 0 0 0 0 7h2.5"/></svg>
+    </button>
+  </div>
+  <div class="filebtns">
+    <button class="btn" id="btn-new" type="button" title="Start over with one gradient (undoable)">New</button>
+    <button class="btn" id="btn-open" type="button" title="Open a .json file or a PNG exported from this tool">Open…</button>
+    <button class="btn" id="btn-save" type="button" title="Save every gradient and the output settings (Ctrl+S)">Save <small>.json</small></button>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="app">
+  <!-- LEFT: gradients, interpolation, adjustments, presets -->
+  <aside class="side side-l">
+    <div class="side-scroll">
+      <section class="sec">
+        <div class="sec-head"><h2>Gradients</h2><span class="mono muted" id="g-count"></span></div>
+        <ol class="glist" id="glist" aria-label="Gradients"></ol>
+        <div class="btns4">
+          <button class="btn" id="g-add" type="button" title="Add a gradient">Add</button>
+          <button class="btn" id="g-dup" type="button" title="Duplicate this gradient">Copy</button>
+          <button class="btn icon" id="g-up" type="button" aria-label="Move up" title="Move up">
+            <svg viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5"/></svg>
+          </button>
+          <button class="btn icon" id="g-down" type="button" aria-label="Move down" title="Move down">
+            <svg viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5 8 13l4.5-4.5"/></svg>
+          </button>
+        </div>
+        <button class="btn" id="g-del" type="button">Delete gradient</button>
+        <p class="hint">With an atlas layout, each gradient becomes one row or column of the texture, in this order.</p>
+      </section>
+
+      <section class="sec">
+        <h2>Interpolation</h2>
+        <div class="grid2">
+          <label class="fld">Color space
+            <select id="g-space">
+              <option value="oklab">OKLab</option>
+              <option value="oklch">OKLCH</option>
+              <option value="srgb">sRGB</option>
+              <option value="linear">Linear RGB</option>
+              <option value="hsl">HSL</option>
+            </select>
+          </label>
+          <label class="fld">Hue path
+            <select id="g-hue">
+              <option value="shorter">Shorter</option>
+              <option value="longer">Longer</option>
+              <option value="increasing">Increasing</option>
+              <option value="decreasing">Decreasing</option>
+            </select>
+          </label>
+        </div>
+        <div class="sl"><label for="g-steps">Steps</label><input type="range" id="g-steps" min="0" max="32" value="0"><output id="g-steps-out">Smooth</output></div>
+        <div class="btns">
+          <button class="btn" id="g-rev" type="button" title="Flip the stops end to end">Reverse</button>
+          <button class="btn" id="g-mirror" type="button" title="Squeeze into the first half and mirror it into the second">Mirror</button>
+          <button class="btn" id="g-even" type="button" title="Space the stops evenly">Distribute</button>
+          <button class="btn" id="g-rand" type="button" title="New random colors (R)">Random</button>
+        </div>
+        <p class="hint">OKLab blends evenly to the eye; sRGB matches CSS and most engines. Hue path only applies to OKLCH and HSL. Steps cuts the gradient into flat bands, for toon ramps.</p>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head"><h2>Adjust</h2><button class="chip" id="adj-reset" type="button">Reset</button></div>
+        <div class="sl"><label for="adj-hue">Hue</label><input type="range" id="adj-hue" data-adj="hue" min="-180" max="180" value="0"><output data-for="hue"></output></div>
+        <div class="sl"><label for="adj-sat">Saturation</label><input type="range" id="adj-sat" data-adj="sat" min="0" max="200" value="100"><output data-for="sat"></output></div>
+        <div class="sl"><label for="adj-bri">Brightness</label><input type="range" id="adj-bri" data-adj="bri" min="0" max="200" value="100"><output data-for="bri"></output></div>
+        <div class="sl"><label for="adj-con">Contrast</label><input type="range" id="adj-con" data-adj="con" min="0" max="200" value="100"><output data-for="con"></output></div>
+        <div class="sl"><label for="adj-op">Opacity</label><input type="range" id="adj-op" data-adj="op" min="0" max="100" value="100"><output data-for="op"></output></div>
+        <p class="hint">Applied to the whole gradient after blending; stops keep their colors. Double-click a slider to reset it.</p>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head"><h2>Presets</h2><button class="chip" id="p-save" type="button">Save current</button></div>
+        <div class="presets" id="presets"></div>
+        <p class="hint">Click to apply to the current gradient, Shift+click to add as a new gradient. Saved presets stay in this browser.</p>
+      </section>
+    </div>
+  </aside>
+
+  <!-- CENTER: stop editor and views -->
+  <main class="center">
+    <section class="editor">
+      <div class="ed-head">
+        <input class="name-in" id="g-name" type="text" maxlength="60" spellcheck="false" aria-label="Gradient name">
+        <span class="hint ed-tip">Click the bar to add a stop · drag a stop down to remove it · Alt+drag to copy · double-click to pick a color</span>
+      </div>
+      <div class="gbar-wrap" id="gbar-wrap">
+        <div class="mids" id="mids"></div>
+        <div class="gbar-frame"><canvas class="gbar" id="gbar"></canvas></div>
+        <div class="stops" id="stops" aria-label="Color stops"></div>
+      </div>
+
+      <div class="stop-panel" id="stop-panel">
+        <div class="fld">Color
+          <div class="colorrow">
+            <input type="color" id="st-color" aria-label="Stop color">
+            <input type="text" id="st-hex" class="hexin" spellcheck="false" aria-label="Stop color as text">
+            <button class="btn icon" id="st-pick" type="button" aria-label="Pick a color from the screen" title="Pick a color from the screen" hidden>
+              <svg viewBox="0 0 16 16"><path d="m9.5 3.5 3 3M11 2l3 3-1.5 1.5-3-3zM9.5 5 3 11.5V13h1.5L11 6.5"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="fld fld-alpha"><label for="st-alpha">Alpha</label>
+          <div class="sl sl-tight"><input type="range" id="st-alpha" min="0" max="100" value="100"><output id="st-alpha-out">100%</output></div>
+        </div>
+        <label class="fld fld-num">Position %<input type="number" id="st-pos" min="0" max="100" step="0.1"></label>
+        <label class="fld fld-blend">Blend to next
+          <select id="st-blend">
+            <option value="linear">Linear</option>
+            <option value="smooth">Smooth</option>
+            <option value="easein">Ease in</option>
+            <option value="easeout">Ease out</option>
+            <option value="hard">Hard edge</option>
+          </select>
+        </label>
+        <label class="fld fld-num">Midpoint %<input type="number" id="st-mid" min="1" max="99" step="0.5"></label>
+        <div class="fld">&nbsp;
+          <div class="colorrow">
+            <button class="btn" id="st-dup" type="button" title="Add a copy of this stop next to it">Copy</button>
+            <button class="btn" id="st-del" type="button" title="Delete this stop (Del)">Delete</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="viewer">
+      <div class="vbar">
+        <div class="tabs" role="tablist" aria-label="View">
+          <button role="tab" id="tab-texture" data-view="texture" aria-selected="true" aria-controls="view-texture">Texture</button>
+          <button role="tab" id="tab-sphere" data-view="sphere" aria-selected="false" aria-controls="view-sphere" tabindex="-1">Sphere</button>
+          <button role="tab" id="tab-curves" data-view="curves" aria-selected="false" aria-controls="view-curves" tabindex="-1">Curves</button>
+          <button role="tab" id="tab-code" data-view="code" aria-selected="false" aria-controls="view-code" tabindex="-1">Code</button>
+        </div>
+
+        <div class="vtools" data-tools="texture">
+          <label class="inline">Zoom
+            <select id="tx-zoom">
+              <option value="fit">Fit</option><option value="0.5">50%</option><option value="1">100%</option>
+              <option value="2">200%</option><option value="4">400%</option><option value="8">800%</option><option value="16">1600%</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="tx-tile"> Tile 3×3</label>
+          <span class="mono muted readout" id="tx-read"></span>
+        </div>
+        <div class="vtools" data-tools="sphere" hidden>
+          <label class="inline">Lookup
+            <select id="sp-mode">
+              <option value="half">Half Lambert</option>
+              <option value="lambert">Lambert</option>
+            </select>
+          </label>
+          <label class="inline">Tint<input type="color" id="sp-tint" value="#ffffff"></label>
+          <span class="hint">Drag to move the light. Uses the current gradient.</span>
+        </div>
+        <div class="vtools" data-tools="curves" hidden>
+          <label class="check ch-r"><input type="checkbox" data-ch="r" checked> R</label>
+          <label class="check ch-g"><input type="checkbox" data-ch="g" checked> G</label>
+          <label class="check ch-b"><input type="checkbox" data-ch="b" checked> B</label>
+          <label class="check ch-a"><input type="checkbox" data-ch="a" checked> Alpha</label>
+          <label class="check ch-l"><input type="checkbox" data-ch="l" checked> Lightness</label>
+          <span class="mono muted readout" id="cv-read"></span>
+        </div>
+        <div class="vtools" data-tools="code" hidden>
+          <label class="inline">Format
+            <select id="cd-fmt">
+              <option value="css">CSS</option>
+              <option value="svg">SVG</option>
+              <option value="unity">Unity C#</option>
+              <option value="glsl">GLSL</option>
+              <option value="hlsl">HLSL</option>
+              <option value="hex">Hex list</option>
+              <option value="json">JSON</option>
+            </select>
+          </label>
+          <label class="inline" id="cd-mode-l">Stops
+            <select id="cd-mode">
+              <option value="native">Native</option>
+              <option value="sampled">Sampled</option>
+            </select>
+          </label>
+          <label class="inline" id="cd-n-l"><span id="cd-n-name">Samples</span><input type="number" id="cd-n" min="2" max="256" value="16"></label>
+          <label class="check" id="cd-all-l"><input type="checkbox" id="cd-all"> All gradients</label>
+        </div>
+      </div>
+
+      <div class="vp" id="view-texture" role="tabpanel" aria-labelledby="tab-texture">
+        <div class="tex-wrap" id="tex-wrap"><canvas id="tex" width="1" height="1"></canvas></div>
+        <div class="vnote" id="tx-note" hidden></div>
+      </div>
+      <div class="vp vp-center" id="view-sphere" role="tabpanel" aria-labelledby="tab-sphere" hidden>
+        <canvas id="sphere" width="1" height="1" aria-label="Lit sphere preview. Drag to move the light."></canvas>
+      </div>
+      <div class="vp vp-pad" id="view-curves" role="tabpanel" aria-labelledby="tab-curves" hidden>
+        <canvas id="curves" width="1" height="1" aria-label="Channel curves of the current gradient"></canvas>
+      </div>
+      <div class="vp vp-code" id="view-code" role="tabpanel" aria-labelledby="tab-code" hidden>
+        <textarea id="cd-out" readonly spellcheck="false" aria-label="Generated code"></textarea>
+        <div class="code-actions">
+          <button class="btn" id="cd-copy" type="button">Copy</button>
+          <button class="btn primary" id="cd-dl" type="button">Download</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- RIGHT: output texture settings and export -->
+  <aside class="side side-r">
+    <div class="side-scroll">
+      <section class="sec">
+        <h2>Texture</h2>
+        <label class="fld">Layout
+          <select data-out="layout">
+            <option value="single">Current gradient</option>
+            <option value="rows">Atlas: all gradients as rows</option>
+            <option value="cols">Atlas: all gradients as columns</option>
+          </select>
+        </label>
+        <div class="grid2">
+          <label class="fld"><span data-size-label="w">Width</span><input type="number" data-out="w" min="1" max="8192"></label>
+          <label class="fld"><span data-size-label="h">Height</span><input type="number" data-out="h" min="1" max="8192"></label>
+        </div>
+        <div class="grid2">
+          <label class="fld">Size preset
+            <select id="size-preset">
+              <option value="">Choose…</option>
+              <option value="256x1">256 × 1</option>
+              <option value="256x4">256 × 4</option>
+              <option value="256x16">256 × 16</option>
+              <option value="512x32">512 × 32</option>
+              <option value="1024x64">1024 × 64</option>
+              <option value="16x16">16 × 16</option>
+              <option value="128x128">128 × 128</option>
+              <option value="256x256">256 × 256</option>
+              <option value="512x512">512 × 512</option>
+              <option value="1024x1024">1024 × 1024</option>
+              <option value="2048x2048">2048 × 2048</option>
+              <option value="1920x1080">1920 × 1080</option>
+            </select>
+          </label>
+          <div class="fld">&nbsp;<button class="btn" id="size-swap" type="button" title="Swap width and height">Swap W ↔ H</button></div>
+        </div>
+        <div class="grid2" data-show="pad">
+          <label class="fld">Padding (px)<input type="number" data-out="pad" min="0" max="256"></label>
+          <label class="fld">Padding fill
+            <select data-out="padFill">
+              <option value="extend">Extend edges</option>
+              <option value="clear">Empty</option>
+            </select>
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" data-out="pot"> Round up to power of two</label>
+        <p class="hint" id="size-hint">Width and height are for one gradient. Atlas layouts stack them with the padding in between. Extend edges repeats each gradient's border pixels into the gaps so filtering never bleeds between rows.</p>
+      </section>
+
+      <section class="sec">
+        <h2>Shape</h2>
+        <div class="shapes" id="shapes" role="radiogroup" aria-label="Shape">
+          <button type="button" role="radio" data-shape="linear" title="Linear"><svg viewBox="0 0 24 24"><defs><linearGradient id="sg1"><stop offset="0" stop-color="currentColor" stop-opacity="0"/><stop offset="1" stop-color="currentColor"/></linearGradient></defs><rect x="3" y="3" width="18" height="18" rx="3" fill="url(#sg1)"/></svg><span>Linear</span></button>
+          <button type="button" role="radio" data-shape="reflect" title="Reflected"><svg viewBox="0 0 24 24"><defs><linearGradient id="sg2"><stop offset="0" stop-color="currentColor"/><stop offset=".5" stop-color="currentColor" stop-opacity="0"/><stop offset="1" stop-color="currentColor"/></linearGradient></defs><rect x="3" y="3" width="18" height="18" rx="3" fill="url(#sg2)"/></svg><span>Reflect</span></button>
+          <button type="button" role="radio" data-shape="radial" title="Radial"><svg viewBox="0 0 24 24"><defs><radialGradient id="sg3"><stop offset="0" stop-color="currentColor" stop-opacity="0"/><stop offset="1" stop-color="currentColor"/></radialGradient></defs><rect x="3" y="3" width="18" height="18" rx="3" fill="url(#sg3)"/></svg><span>Radial</span></button>
+          <button type="button" role="radio" data-shape="angular" title="Angular (conic)"><svg viewBox="0 0 24 24"><path d="M12 12V3a9 9 0 1 1-9 9z" fill="currentColor" opacity=".35"/><path d="M12 12H3a9 9 0 0 1 9-9z" fill="currentColor"/></svg><span>Angular</span></button>
+          <button type="button" role="radio" data-shape="diamond" title="Diamond"><svg viewBox="0 0 24 24"><path d="M12 2 22 12 12 22 2 12z" fill="currentColor" opacity=".35"/><path d="M12 7l5 5-5 5-5-5z" fill="currentColor" opacity=".2"/></svg><span>Diamond</span></button>
+          <button type="button" role="radio" data-shape="square" title="Square"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" opacity=".35"/><rect x="8" y="8" width="8" height="8" fill="currentColor" opacity=".2"/></svg><span>Square</span></button>
+        </div>
+        <div class="sl"><label for="o-angle">Angle</label><input type="range" id="o-angle" data-out="angle" min="-180" max="180" step="1"><output data-for="angle"></output></div>
+        <div class="dirs" id="dirs" aria-label="Quick angles">
+          <button class="btn" type="button" data-angle="0" title="Left to right">→</button>
+          <button class="btn" type="button" data-angle="90" title="Top to bottom">↓</button>
+          <button class="btn" type="button" data-angle="180" title="Right to left">←</button>
+          <button class="btn" type="button" data-angle="-90" title="Bottom to top">↑</button>
+          <button class="btn" type="button" data-angle="45" title="Diagonal">↘</button>
+          <button class="btn" type="button" data-angle="-45" title="Diagonal">↗</button>
+        </div>
+        <div class="sl"><label for="o-scale">Scale</label><input type="range" id="o-scale" data-out="scale" min="5" max="400" step="1"><output data-for="scale"></output></div>
+        <div class="sl"><label for="o-cx">Center X</label><input type="range" id="o-cx" data-out="cx" min="-50" max="150" step="0.5"><output data-for="cx"></output></div>
+        <div class="sl"><label for="o-cy">Center Y</label><input type="range" id="o-cy" data-out="cy" min="-50" max="150" step="0.5"><output data-for="cy"></output></div>
+        <label class="fld">Outside the gradient
+          <select data-out="repeat">
+            <option value="clamp">Clamp (hold end colors)</option>
+            <option value="repeat">Repeat</option>
+            <option value="mirror">Mirror repeat</option>
+          </select>
+        </label>
+        <label class="check" data-show="circle"><input type="checkbox" data-out="circle"> Keep circular (ignore aspect)</label>
+        <label class="check" data-show="ends" title="The first and last pixel get exactly the end colors, instead of colors half a pixel in"><input type="checkbox" data-out="ends"> End colors on edge pixels</label>
+        <p class="hint">Angle 0° runs left to right and turns clockwise. Scale stretches the gradient around its center; below 100% the outside setting shows. Double-click a slider to reset it.</p>
+      </section>
+
+      <section class="sec">
+        <h2>Quality</h2>
+        <div class="grid2">
+          <label class="fld">Bit depth
+            <select data-out="depth">
+              <option value="8">8-bit PNG</option>
+              <option value="16">16-bit PNG</option>
+            </select>
+          </label>
+          <label class="fld" data-show="dither">Dithering
+            <select data-out="dither">
+              <option value="none">None</option>
+              <option value="ordered">Ordered</option>
+              <option value="noise">Noise</option>
+            </select>
+          </label>
+        </div>
+        <div class="bgrow">
+          <label class="check"><input type="checkbox" data-out="bgOn"> Fill background</label>
+          <input type="color" data-out="bg" aria-label="Background color" data-show="bg">
+        </div>
+        <p class="hint">Smooth gradients band in 8 bits: dithering hides it, 16-bit removes it. Without a background fill, transparent stops stay transparent in the PNG.</p>
+      </section>
+    </div>
+
+    <section class="sec export">
+      <h2>Export</h2>
+      <button class="btn ex primary" id="ex-png" type="button">Export texture <small>.png</small></button>
+      <button class="btn ex" id="ex-copy" type="button">Copy image</button>
+      <p class="hint" id="ex-note">The PNG keeps the gradient settings inside it. Open it here again to keep editing.</p>
+    </section>
+  </aside>
+</div>
+
+<input type="file" id="file" accept=".json,.png,application/json,image/png" hidden>
+<div class="filedrop" id="drop" hidden><div>Drop a .json file or a PNG exported from Gradient Maker</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Plain scripts, not modules, so the page works opened straight from disk.
+     They share one global scope; order matters, since each may use what loaded before it. -->
+<script src="js/util.js"></script>
+<script src="js/color.js"></script>
+<script src="js/model.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/render.js"></script>
+<script src="js/png.js"></script>
+<script src="js/code.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/views.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
