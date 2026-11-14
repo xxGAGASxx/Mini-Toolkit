@@ -44,3 +44,12 @@ Tools marked **Needs internet** load a library from a CDN (cdn.jsdelivr.net / un
 - Code export: CSS, SVG, Unity C# `Gradient`, GLSL, HLSL, hex list, JSON
 - Lit sphere and channel curve previews, presets, undo / redo, autosave
 - Open `GradientMaker/gradient-maker.html`. Works offline
+
+### Texture Tools
+- Transform: resize (Lanczos, bicubic, bilinear, nearest), crop with a box on the image, trim, rotate / flip, canvas size
+- Color: brightness / contrast, hue / saturation / colorize, shadows / highlights
+- Effects: blur / sharpen, pixelate / posterize, noise, gradient overlay, pattern overlay (built-in or your own tile), outline
+- Tiling: tiled preview, seam fix, even out lighting, wrap offset, filters that wrap around the edges
+- Color, Effects and Tiling stay live on top of the image until you export; Bake applies them for good. Undo / redo for everything
+- Export PNG, JPEG, WebP, BMP, TGA. PNG, BMP and TGA keep exact colors under transparent pixels. Opens TGA files too
+- Open `TextureTools/texture-tools.html`. Works offline

@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Texture Tools</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true"></span>Texture Tools</div>
+  <div class="hist">
+    <button class="ibtn" id="btn-undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M5.5 3 2 6.5 5.5 10M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7.5"/></svg>
+    </button>
+    <button class="ibtn" id="btn-redo" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" disabled>
+      <svg viewBox="0 0 16 16"><path d="M10.5 3 14 6.5 10.5 10M13.5 6.5H6a3.5 3.5 0 0 0 0 7h2.5"/></svg>
+    </button>
+  </div>
+  <div class="filebtns">
+    <button class="btn" id="btn-open" type="button" title="Open an image (Ctrl+O). You can also drop or paste one.">Open…</button>
+    <button class="btn" id="btn-bake" type="button" title="Apply the Color, Effects and Tiling settings to the image, then reset them (undoable)">Bake</button>
+    <button class="btn" id="btn-reset" type="button" title="Reset every Color, Effects and Tiling setting (undoable)">Reset all</button>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="app">
+  <main class="center">
+    <div class="vbar">
+      <div class="zoom">
+        <button class="btn sm" id="z-fit" type="button" title="Fit in view (F, or double-click the image)">Fit</button>
+        <button class="btn sm" id="z-100" type="button" title="Actual pixels (1)">1:1</button>
+        <button class="btn sm icon" id="z-out" type="button" aria-label="Zoom out" title="Zoom out (−)">−</button>
+        <span class="mono zval" id="z-val">–</span>
+        <button class="btn sm icon" id="z-in" type="button" aria-label="Zoom in" title="Zoom in (+)">+</button>
+      </div>
+      <label class="check"><input type="checkbox" data-v="tiled">Tiled <span class="muted">(T)</span></label>
+      <button class="btn sm" id="v-before" type="button" title="Hold to see the image without its Color, Effects and Tiling settings (or hold \)">Hold: original</button>
+      <span class="readout mono muted" id="readout"></span>
+    </div>
+    <div class="vp" id="vp">
+      <canvas id="view" aria-label="Texture view"></canvas>
+      <div class="empty" id="empty">
+        <div class="empty-card">
+          <p class="empty-title">Open a texture to start</p>
+          <p class="hint">PNG, JPEG, WebP, GIF, BMP, TGA, AVIF or SVG. Drop a file here, paste one with Ctrl+V, or:</p>
+          <button class="btn primary" id="e-open" type="button">Open image…</button>
+          <div class="btns">
+            <button class="btn" id="e-bricks" type="button" title="A brick wall with uneven light that doesn't tile yet">Sample: bricks</button>
+            <button class="btn" id="e-sprite" type="button" title="A gem on a transparent background">Sample: sprite</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <aside class="side">
+    <div class="ttabs" role="tablist" aria-label="Tools">
+      <button role="tab" type="button" id="tab-transform" aria-controls="pan-transform" data-tab="transform">Transform</button>
+      <button role="tab" type="button" id="tab-color" aria-controls="pan-color" data-tab="color">Color</button>
+      <button role="tab" type="button" id="tab-effects" aria-controls="pan-effects" data-tab="effects">Effects</button>
+      <button role="tab" type="button" id="tab-tiling" aria-controls="pan-tiling" data-tab="tiling">Tiling</button>
+    </div>
+
+    <div class="side-scroll">
+      <!-- TRANSFORM: changes the image itself, one undoable step at a time -->
+      <div class="tpanel" role="tabpanel" id="pan-transform" aria-labelledby="tab-transform">
+        <p class="hint note">These steps change the image itself (Ctrl+Z undoes them). Color, Effects and Tiling stay live on top until you export or Bake.</p>
+
+        <section class="sec">
+          <h2>Resize</h2>
+          <div class="dims">
+            <label class="fld">Width<input type="number" id="rs-w" min="1" max="8192" step="1"></label>
+            <button class="ibtn lock" id="rs-lock" type="button" aria-pressed="true" aria-label="Keep proportions" title="Keep proportions">
+              <svg viewBox="0 0 16 16"><path d="M6.5 9.5l3-3"/><path d="M7.2 4.3l1.1-1.1a2.8 2.8 0 0 1 4 4l-1.1 1.1"/><path d="M8.8 11.7l-1.1 1.1a2.8 2.8 0 0 1-4-4l1.1-1.1"/></svg>
+            </button>
+            <label class="fld">Height<input type="number" id="rs-h" min="1" max="8192" step="1"></label>
+          </div>
+          <div class="chips">
+            <button class="chip" type="button" data-rs="0.25">25%</button>
+            <button class="chip" type="button" data-rs="0.5">50%</button>
+            <button class="chip" type="button" data-rs="2">200%</button>
+            <button class="chip" type="button" data-rs="4">400%</button>
+            <button class="chip" type="button" data-rs="pot" title="Nearest power of two on each side">Power of 2</button>
+          </div>
+          <label class="fld">Filter
+            <select id="rs-filter">
+              <option value="lanczos">Lanczos (sharpest)</option>
+              <option value="bicubic" selected>Bicubic</option>
+              <option value="bilinear">Bilinear (soft)</option>
+              <option value="nearest">Nearest (pixel art)</option>
+            </select>
+          </label>
+          <button class="btn primary" id="rs-apply" type="button">Resize</button>
+        </section>
+
+        <section class="sec">
+          <div class="sec-head"><h2>Crop</h2><button class="chip" id="cr-edit" type="button" aria-pressed="false">Edit on image</button></div>
+          <div class="grid4">
+            <label class="fld">X<input type="number" id="cr-x" min="0" step="1" data-crop="x"></label>
+            <label class="fld">Y<input type="number" id="cr-y" min="0" step="1" data-crop="y"></label>
+            <label class="fld">Width<input type="number" id="cr-w" min="1" step="1" data-crop="w"></label>
+            <label class="fld">Height<input type="number" id="cr-h" min="1" step="1" data-crop="h"></label>
+          </div>
+          <label class="fld">Aspect ratio
+            <select id="cr-aspect">
+              <option value="0">Free</option>
+              <option value="1">1 : 1</option>
+              <option value="2">2 : 1</option>
+              <option value="0.5">1 : 2</option>
+              <option value="1.3333333333">4 : 3</option>
+              <option value="0.75">3 : 4</option>
+              <option value="1.7777777778">16 : 9</option>
+              <option value="0.5625">9 : 16</option>
+            </select>
+          </label>
+          <div class="btns">
+            <button class="btn" id="cr-cancel" type="button">Cancel</button>
+            <button class="btn primary" id="cr-apply" type="button">Crop</button>
+          </div>
+          <p class="hint">Drag on the image to draw the area; drag its edges, corners or middle to adjust. Enter crops, Esc cancels.</p>
+        </section>
+
+        <section class="sec">
+          <h2>Trim</h2>
+          <div class="grid2">
+            <label class="fld">Remove
+              <select id="tr-mode">
+                <option value="alpha">Transparent edges</option>
+                <option value="corner">Top-left pixel's color</option>
+              </select>
+            </label>
+            <label class="fld">Padding (px)<input type="number" id="tr-pad" min="0" max="1024" step="1" value="0"></label>
+          </div>
+          <label class="sl"><span>Tolerance</span><input type="range" id="tr-tol" min="0" max="254" value="0"><output id="tr-tol-out">0</output></label>
+          <button class="btn primary" id="tr-apply" type="button">Trim</button>
+        </section>
+
+        <section class="sec">
+          <h2>Rotate &amp; flip</h2>
+          <div class="btns5">
+            <button class="btn icon-txt" type="button" data-rot="ccw" title="Rotate 90° counter-clockwise" aria-label="Rotate 90 degrees counter-clockwise">
+              <svg viewBox="0 0 16 16"><path d="M3.2 7.5A5 5 0 1 1 5 11.8"/><path d="M2.5 3.5v4h4"/></svg>
+            </button>
+            <button class="btn icon-txt" type="button" data-rot="cw" title="Rotate 90° clockwise" aria-label="Rotate 90 degrees clockwise">
+              <svg viewBox="0 0 16 16"><path d="M12.8 7.5A5 5 0 1 0 11 11.8"/><path d="M13.5 3.5v4h-4"/></svg>
+            </button>
+            <button class="btn icon-txt" type="button" data-rot="180" title="Rotate 180°">180°</button>
+            <button class="btn icon-txt" type="button" data-rot="fh" title="Flip horizontally (mirror left and right)" aria-label="Flip horizontally">
+              <svg viewBox="0 0 16 16"><path d="M8 1.5v13"/><path d="M5.5 4 2 12h3.5z"/><path d="M10.5 4 14 12h-3.5z"/></svg>
+            </button>
+            <button class="btn icon-txt" type="button" data-rot="fv" title="Flip vertically (upside down)" aria-label="Flip vertically">
+              <svg viewBox="0 0 16 16"><path d="M1.5 8h13"/><path d="M4 5.5 12 2v3.5z"/><path d="M4 10.5l8 3.5v-3.5z"/></svg>
+            </button>
+          </div>
+          <label class="sl"><span>Any angle</span><input type="range" id="ro-angle" min="-180" max="180" step="0.5" value="0"><output id="ro-angle-out">0°</output></label>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="ro-expand" checked>Grow canvas to fit</label>
+            <label class="check"><input type="checkbox" id="ro-smooth" checked>Smooth</label>
+          </div>
+          <button class="btn primary" id="ro-apply" type="button">Rotate</button>
+          <p class="hint">The dashed outline previews the angle. Clockwise is positive; new corners are transparent.</p>
+        </section>
+
+        <section class="sec">
+          <h2>Canvas size</h2>
+          <div class="grid2">
+            <label class="fld">Width<input type="number" id="cs-w" min="1" max="8192" step="1"></label>
+            <label class="fld">Height<input type="number" id="cs-h" min="1" max="8192" step="1"></label>
+          </div>
+          <div class="chips">
+            <button class="chip" type="button" data-cs="square" title="Make both sides as long as the longer one">Square</button>
+            <button class="chip" type="button" data-cs="pot" title="Grow each side to the next power of two">Next power of 2</button>
+            <button class="chip" type="button" data-cs="pad" title="Add 2 px on every side">+2 px border</button>
+          </div>
+          <div class="cs-row">
+            <div class="fld">Anchor
+              <div class="anchor" id="cs-anchor" role="radiogroup" aria-label="Anchor">
+                <button type="button" role="radio" data-a="0,0" aria-label="Top left"></button>
+                <button type="button" role="radio" data-a="1,0" aria-label="Top"></button>
+                <button type="button" role="radio" data-a="2,0" aria-label="Top right"></button>
+                <button type="button" role="radio" data-a="0,1" aria-label="Left"></button>
+                <button type="button" role="radio" data-a="1,1" aria-label="Center"></button>
+                <button type="button" role="radio" data-a="2,1" aria-label="Right"></button>
+                <button type="button" role="radio" data-a="0,2" aria-label="Bottom left"></button>
+                <button type="button" role="radio" data-a="1,2" aria-label="Bottom"></button>
+                <button type="button" role="radio" data-a="2,2" aria-label="Bottom right"></button>
+              </div>
+            </div>
+            <div class="cs-fill">
+              <label class="fld">Fill new area
+                <select id="cs-fill">
+                  <option value="transparent">Transparent</option>
+                  <option value="color">Color</option>
+                  <option value="edge">Extend edge pixels</option>
+                  <option value="repeat">Repeat (wrap)</option>
+                  <option value="mirror">Mirror</option>
+                </select>
+              </label>
+              <label class="inline" id="cs-color-row" hidden>Color <input type="color" id="cs-color" value="#000000"></label>
+            </div>
+          </div>
+          <button class="btn primary" id="cs-apply" type="button">Change canvas</button>
+          <p class="hint">Smaller than the image cuts it from the anchor side. Extend edge pixels is a good padding for texture atlases.</p>
+        </section>
+      </div>
+
+      <!-- COLOR -->
+      <div class="tpanel" role="tabpanel" id="pan-color" aria-labelledby="tab-color" hidden>
+        <section class="sec" data-sec="bc">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="bc.on"><h2>Brightness / Contrast</h2></label>
+            <button class="chip" type="button" data-reset="bc">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Brightness</span><input type="range" data-k="bc.bri" min="-100" max="100"><output data-f="signed"></output></label>
+            <label class="sl"><span>Contrast</span><input type="range" data-k="bc.con" min="-100" max="100"><output data-f="signed"></output></label>
+            <label class="check"><input type="checkbox" data-k="bc.inv">Invert colors</label>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="hs">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="hs.on"><h2>Hue / Saturation</h2></label>
+            <button class="chip" type="button" data-reset="hs">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Hue</span><input type="range" data-k="hs.hue" min="-180" max="180"><output data-f="deg"></output></label>
+            <label class="sl"><span>Saturation</span><input type="range" data-k="hs.sat" min="-100" max="100"><output data-f="signed"></output></label>
+            <label class="sl"><span>Lightness</span><input type="range" data-k="hs.lig" min="-100" max="100"><output data-f="signed"></output></label>
+            <label class="check"><input type="checkbox" data-k="hs.colorize">Colorize</label>
+            <p class="hint" data-show="k:hs.colorize=true">Colorize tints the whole image one color: Hue picks it, Saturation sets its strength.</p>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="sh">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="sh.on"><h2>Shadows / Highlights</h2></label>
+            <button class="chip" type="button" data-reset="sh">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Shadows</span><input type="range" data-k="sh.sha" min="-100" max="100"><output data-f="signed"></output></label>
+            <label class="sl"><span>Highlights</span><input type="range" data-k="sh.hil" min="-100" max="100"><output data-f="signed"></output></label>
+            <label class="sl"><span>Tonal width</span><input type="range" data-k="sh.width" min="5" max="100"><output data-f="pct"></output></label>
+            <label class="sl"><span>Radius</span><input type="range" data-k="sh.radius" min="0" max="100"><output data-f="px"></output></label>
+            <p class="hint">Positive brightens. Shadows works on dark areas, Highlights on bright ones; tonal width sets how far into the midtones they reach. Radius judges each area by its surroundings, so detail keeps its contrast.</p>
+          </div>
+        </section>
+        <p class="hint pad">Double-click a slider to reset it. Moving any setting turns its section on; the checkbox turns it off again.</p>
+      </div>
+
+      <!-- EFFECTS -->
+      <div class="tpanel" role="tabpanel" id="pan-effects" aria-labelledby="tab-effects" hidden>
+        <p class="hint note">Effects apply top to bottom, after Color. Moving a setting turns its effect on.</p>
+
+        <section class="sec" data-sec="blur">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="blur.on"><h2>Blur / Sharpen</h2></label>
+            <button class="chip" type="button" data-reset="blur">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="fld">Mode
+              <select data-k="blur.mode">
+                <option value="blur">Gaussian blur</option>
+                <option value="sharpen">Sharpen (unsharp mask)</option>
+              </select>
+            </label>
+            <label class="sl"><span>Radius</span><input type="range" data-k="blur.radius" min="0" max="50" step="0.1"><output data-f="px"></output></label>
+            <label class="sl" data-show="k:blur.mode=sharpen"><span>Amount</span><input type="range" data-k="blur.amount" min="0" max="500"><output data-f="pct"></output></label>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="pix">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="pix.on"><h2>Pixelate</h2></label>
+            <button class="chip" type="button" data-reset="pix">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Cell size</span><input type="range" data-k="pix.size" min="1" max="128"><output data-f="px"></output></label>
+            <label class="fld">Cell color
+              <select data-k="pix.mode">
+                <option value="avg">Average of the cell</option>
+                <option value="center">Center pixel (crisp)</option>
+              </select>
+            </label>
+            <label class="sl"><span>Posterize</span><input type="range" data-k="pix.levels" min="0" max="32"><output data-f="levels"></output></label>
+            <p class="hint">Posterize limits each channel to that many levels, for a retro or painted look.</p>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="noise">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="noise.on"><h2>Noise</h2></label>
+            <button class="chip" type="button" data-reset="noise">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Amount</span><input type="range" data-k="noise.amount" min="0" max="100"><output data-f="pct"></output></label>
+            <label class="sl"><span>Grain size</span><input type="range" data-k="noise.grain" min="1" max="32"><output data-f="px"></output></label>
+            <div class="grid2">
+              <label class="fld">Distribution
+                <select data-k="noise.dist">
+                  <option value="gauss">Gaussian</option>
+                  <option value="uniform">Uniform</option>
+                </select>
+              </label>
+              <div class="fld">Seed
+                <div class="seedrow">
+                  <input type="number" data-k="noise.seed" min="1" max="99999" step="1" aria-label="Noise seed">
+                  <button class="btn icon" type="button" data-seed="noise.seed" title="New random seed" aria-label="New random seed">
+                    <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><circle cx="5.75" cy="5.75" r=".6"/><circle cx="10.25" cy="10.25" r=".6"/><circle cx="10.25" cy="5.75" r=".6"/><circle cx="5.75" cy="10.25" r=".6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <label class="check"><input type="checkbox" data-k="noise.mono">Monochrome</label>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="grad">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="grad.on"><h2>Gradient overlay</h2></label>
+            <button class="chip" type="button" data-reset="grad">Reset</button>
+          </div>
+          <div class="sec-body">
+            <div class="grid2">
+              <label class="fld">Style
+                <select data-k="grad.type">
+                  <option value="linear">Linear</option>
+                  <option value="radial">Radial</option>
+                  <option value="reflected">Reflected</option>
+                  <option value="angle">Angle</option>
+                  <option value="diamond">Diamond</option>
+                </select>
+              </label>
+              <label class="fld">Blend
+                <select data-k="grad.blend" class="blend-sel"></select>
+              </label>
+            </div>
+            <div class="crow"><span>Start</span><input type="color" data-k="grad.c1" aria-label="Start color"><input type="range" data-k="grad.a1" min="0" max="100" aria-label="Start opacity"><output data-f="pct"></output></div>
+            <div class="crow"><span>End</span><input type="color" data-k="grad.c2" aria-label="End color"><input type="range" data-k="grad.a2" min="0" max="100" aria-label="End opacity"><output data-f="pct"></output></div>
+            <label class="sl" data-show="k:grad.type!=radial"><span>Angle</span><input type="range" data-k="grad.angle" min="0" max="360"><output data-f="deg"></output></label>
+            <label class="sl"><span>Scale</span><input type="range" data-k="grad.scale" min="10" max="300"><output data-f="pct"></output></label>
+            <label class="sl"><span>Opacity</span><input type="range" data-k="grad.opacity" min="0" max="100"><output data-f="pct"></output></label>
+            <label class="check"><input type="checkbox" data-k="grad.rev">Reverse</label>
+            <p class="hint">Only colors the image where it is visible; transparency is kept. 90° runs from the bottom (start) to the top (end).</p>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="pat">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="pat.on"><h2>Pattern overlay</h2></label>
+            <button class="chip" type="button" data-reset="pat">Reset</button>
+          </div>
+          <div class="sec-body">
+            <div class="grid2">
+              <label class="fld">Pattern
+                <select data-k="pat.type">
+                  <option value="checker">Checker</option>
+                  <option value="stripes">Stripes</option>
+                  <option value="dots">Dots</option>
+                  <option value="grid">Grid</option>
+                  <option value="bricks">Bricks</option>
+                  <option value="noise">Clouds (noise)</option>
+                  <option value="image">Image…</option>
+                </select>
+              </label>
+              <label class="fld">Blend
+                <select data-k="pat.blend" class="blend-sel"></select>
+              </label>
+            </div>
+            <div class="patimg" data-show="k:pat.type=image">
+              <button class="btn" type="button" id="pat-load">Load tile image…</button>
+              <span class="mono muted" id="pat-name">none</span>
+            </div>
+            <label class="sl"><span>Size</span><input type="range" data-k="pat.size" min="2" max="512"><output data-f="px"></output></label>
+            <label class="sl"><span>Angle</span><input type="range" data-k="pat.angle" min="0" max="359"><output data-f="deg"></output></label>
+            <label class="sl" data-show="k:pat.type=stripes,dots,grid,bricks"><span>Thickness</span><input type="range" data-k="pat.thick" min="1" max="100"><output data-f="pct"></output></label>
+            <div class="crow" data-show="k:pat.type!=image"><span>Color</span><input type="color" data-k="pat.fg" aria-label="Pattern color"><input type="range" data-k="pat.fa" min="0" max="100" aria-label="Pattern color opacity"><output data-f="pct"></output></div>
+            <div class="crow" data-show="k:pat.type!=image"><span>Background</span><input type="color" data-k="pat.bg" aria-label="Background color"><input type="range" data-k="pat.ba" min="0" max="100" aria-label="Background opacity"><output data-f="pct"></output></div>
+            <label class="sl"><span>Opacity</span><input type="range" data-k="pat.opacity" min="0" max="100"><output data-f="pct"></output></label>
+            <div class="row">
+              <label class="check"><input type="checkbox" data-k="pat.fit">Fit to image (tiles)</label>
+              <div class="seedrow sm" data-show="k:pat.type=noise">
+                <input type="number" data-k="pat.seed" min="1" max="99999" step="1" aria-label="Clouds seed">
+                <button class="btn icon" type="button" data-seed="pat.seed" title="New random seed" aria-label="New random seed">
+                  <svg viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.5"/><circle cx="5.75" cy="5.75" r=".6"/><circle cx="10.25" cy="10.25" r=".6"/><circle cx="10.25" cy="5.75" r=".6"/><circle cx="5.75" cy="10.25" r=".6"/></svg>
+                </button>
+              </div>
+            </div>
+            <p class="hint">Fit to image rounds the size so a whole number of cells spans the image, so the result still tiles (at 0°, 90°, 180° and 270°).</p>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="outline">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="outline.on"><h2>Outline</h2></label>
+            <button class="chip" type="button" data-reset="outline">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Size</span><input type="range" data-k="outline.size" min="1" max="64"><output data-f="px"></output></label>
+            <label class="fld">Position
+              <select data-k="outline.pos">
+                <option value="outside">Outside</option>
+                <option value="inside">Inside</option>
+                <option value="center">Center</option>
+              </select>
+            </label>
+            <div class="crow"><span>Color</span><input type="color" data-k="outline.color" aria-label="Outline color"><input type="range" data-k="outline.alpha" min="0" max="100" aria-label="Outline opacity"><output data-f="pct"></output></div>
+            <label class="sl"><span>Threshold</span><input type="range" data-k="outline.thr" min="1" max="100"><output data-f="pct"></output></label>
+            <p class="hint">Follows the edge of the visible shape (alpha at or above the threshold). On an opaque texture, Inside draws a frame. If an outside outline gets cut off, add room with Canvas size.</p>
+          </div>
+        </section>
+      </div>
+
+      <!-- TILING -->
+      <div class="tpanel" role="tabpanel" id="pan-tiling" aria-labelledby="tab-tiling" hidden>
+        <section class="sec">
+          <h2>Tiled view</h2>
+          <label class="check"><input type="checkbox" data-v="tiled">Show the texture repeated (T)</label>
+          <div class="grid2">
+            <label class="fld">Repeats
+              <select data-v="reps" data-num>
+                <option value="2">2 × 2</option>
+                <option value="3">3 × 3</option>
+                <option value="4">4 × 4</option>
+                <option value="5">5 × 5</option>
+              </select>
+            </label>
+            <label class="check pushdown"><input type="checkbox" data-v="grid">Tile borders</label>
+          </div>
+          <p class="hint">Borders hide thin seams, so check with them off too. The view only; export is always one tile.</p>
+        </section>
+
+        <section class="sec" data-sec="seam">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="seam.on"><h2>Seam fix</h2></label>
+            <button class="chip" type="button" data-reset="seam">Reset</button>
+          </div>
+          <div class="sec-body">
+            <div class="grid2">
+              <label class="fld">Method
+                <select data-k="seam.method">
+                  <option value="cross">Offset cross-fade</option>
+                  <option value="mirror">Mirror blend</option>
+                </select>
+              </label>
+              <label class="fld">Direction
+                <select data-k="seam.axis">
+                  <option value="xy">Both</option>
+                  <option value="x">Left / right only</option>
+                  <option value="y">Top / bottom only</option>
+                </select>
+              </label>
+            </div>
+            <label class="sl"><span>Blend width</span><input type="range" data-k="seam.width" min="2" max="100"><output data-f="pct"></output></label>
+            <label class="check"><input type="checkbox" data-k="seam.keep">Keep contrast in the blend</label>
+            <p class="hint">Offset cross-fade blends in a copy shifted by half the image, which wraps cleanly; it suits organic textures (stone, grass, noise). Mirror blend averages each edge with the opposite one. Width is how far in from the edges the blend reaches.</p>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="bal">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="bal.on"><h2>Even out lighting</h2></label>
+            <button class="chip" type="button" data-reset="bal">Reset</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Strength</span><input type="range" data-k="bal.strength" min="0" max="100"><output data-f="pct"></output></label>
+            <label class="sl"><span>Radius</span><input type="range" data-k="bal.radius" min="2" max="50"><output data-f="pct"></output></label>
+            <label class="fld">Evens out
+              <select data-k="bal.mode">
+                <option value="lum">Brightness</option>
+                <option value="rgb">Brightness and color</option>
+              </select>
+            </label>
+            <p class="hint">Removes uneven light (a bright corner, a dark side) that makes repeats stand out. Runs first, before Color. Radius is a share of the image size: smaller flattens more.</p>
+          </div>
+        </section>
+
+        <section class="sec" data-sec="off">
+          <div class="sec-head">
+            <label class="sw"><input type="checkbox" data-k="off.on"><h2>Offset</h2></label>
+            <button class="chip" type="button" id="off-half">Half</button>
+          </div>
+          <div class="sec-body">
+            <label class="sl"><span>Horizontal</span><input type="range" data-k="off.x" min="0" max="100"><output data-f="pct"></output></label>
+            <label class="sl"><span>Vertical</span><input type="range" data-k="off.y" min="0" max="100"><output data-f="pct"></output></label>
+            <p class="hint">Shifts the image with wrap-around, so the edges meet in the middle where seams are easy to see. Runs last; turn it off before exporting unless you want the shift.</p>
+          </div>
+        </section>
+
+        <section class="sec">
+          <h2>Edges</h2>
+          <label class="check"><input type="checkbox" data-k="wrap">Wrap filters around the edges</label>
+          <p class="hint">For tiling textures: blur, sharpen, noise, shadows / highlights and resizing read across the edge from the opposite side, so they don't create seams.</p>
+        </section>
+      </div>
+    </div>
+
+    <!-- EXPORT: outside the tabs, always here -->
+    <section class="sec export">
+      <div class="sec-head"><h2>Export</h2><span class="mono muted" id="ex-size"></span></div>
+      <div class="grid2">
+        <label class="fld">Format
+          <select data-x="fmt">
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+            <option value="bmp">BMP</option>
+            <option value="tga">TGA</option>
+          </select>
+        </label>
+        <label class="fld">Transparency
+          <select data-x="alpha" id="ex-alpha">
+            <option value="keep">Keep alpha</option>
+            <option value="drop">Drop alpha</option>
+            <option value="matte">Fill with color</option>
+          </select>
+        </label>
+      </div>
+      <label class="sl" data-show="x:fmt=jpeg,webp"><span>Quality</span><input type="range" data-x="quality" min="1" max="100"><output></output></label>
+      <label class="inline" id="ex-matte-row">Background <input type="color" data-x="matte"></label>
+      <label class="check" data-show="x:fmt=tga"><input type="checkbox" data-x="rle">RLE compression</label>
+      <label class="fld">File name
+        <span class="namerow"><input type="text" data-x="name" id="ex-name" spellcheck="false" autocomplete="off"><span class="mono muted" id="ex-ext">.png</span></span>
+      </label>
+      <p class="hint" id="ex-note" hidden></p>
+      <div class="btns">
+        <button class="btn" id="ex-copy" type="button" title="Copy to the clipboard as PNG">Copy</button>
+        <button class="btn primary" id="ex-save" type="button" title="Save the file (Ctrl+E)">Export <small>Ctrl+E</small></button>
+      </div>
+    </section>
+  </aside>
+</div>
+
+<input type="file" id="file" accept="image/*,.tga" hidden>
+<input type="file" id="pat-file" accept="image/*,.tga" hidden>
+<div class="filedrop" id="drop" hidden><div>Drop an image to open it</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Plain scripts, not modules, so the page works opened straight from disk.
+     Order matters: helpers first, the app last. -->
+<script src="js/util.js"></script>
+<script src="js/image.js"></script>
+<script src="js/filters.js"></script>
+<script src="js/transform.js"></script>
+<script src="js/color.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/tiling.js"></script>
+<script src="js/pipeline.js"></script>
+<script src="js/encode.js"></script>
+<script src="js/state.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/viewer.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/tools.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
