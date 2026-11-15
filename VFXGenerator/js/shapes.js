@@ -7,7 +7,8 @@
 // can fill it edge to edge and tile.
 //
 // A generator has:
-//   params   settings shown in the panel; values are stored as shown (90 means 90 %)
+//   params   settings shown in the panel; values are stored as shown (90 means 90 %). Sliders
+//            can be animated over a flipbook; int: true keeps a count whole while it changes
 //   prep     (params, ctx) -> whatever fill needs, worked out once per frame.
 //            ctx = { seed, z, pz, ax, ay }: seed for this frame, time position z along the noise
 //            (pz > 0: it repeats after pz, for loops), and the frame's half size in layer units
@@ -46,7 +47,7 @@ function sdBox(x, y, bx, by) {
   const qx = Math.abs(x) - bx, qy = Math.abs(y) - by;
   return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
 }
-// Star with n points (Inigo Quilez's sdStar). m runs from n (a regular polygon) down to 2 (thin
+// Star with n points (Inigo Quilez's sdStar). m runs from 2 (a regular polygon) up to n (thin
 // spikes). One point faces up.
 function starSdf(n, m) {
   const an = Math.PI / n, en = Math.PI / m;
@@ -70,10 +71,12 @@ function sdHeart(x, y) {
 }
 
 /* ---------- lightning: midpoint displacement, with forks */
+// Returns the segments S (six numbers each: x0, y0, x1, y1, width, brightness) and T, each
+// segment's arrival at its start and end (0 where the bolt starts, 1 at the last tip it reaches).
 function buildBolt(p, seed) {
-  const r = rng(seed), segs = [];
+  const r = rng(seed), segs = [], T = [];
   const L = p.length / 100, jag = p.jag / 100, thin = p.thin / 100, forks = (p.branches / 100) * 6;
-  function bolt(ax, ay, bx, by, levels, w0, b0, depth) {
+  function bolt(ax, ay, bx, by, levels, w0, b0, depth, t0) {
     const len0 = Math.hypot(bx - ax, by - ay);
     let X = [ax, bx], Y = [ay, by], amp = jag * len0 * 0.3;
     for (let l = 0; l < levels; l++) {
@@ -91,18 +94,41 @@ function buildBolt(p, seed) {
     for (let i = 0; i < n; i++) {
       const f = i / n, w = w0 * (1 - thin * f), b = b0 * (1 - 0.5 * thin * f);
       segs.push(X[i], Y[i], X[i + 1], Y[i + 1], w, b);
+      T.push(t0 + f * len0, t0 + ((i + 1) / n) * len0);
       if (i > 0 && r() < chance) {
         const dir = Math.atan2(Y[i + 1] - Y[i], X[i + 1] - X[i]) + (r() < 0.5 ? -1 : 1) * (0.35 + 0.55 * r());
         const blen = (p.branchLen / 100) * len0 * (1 - f) * (0.5 + 0.5 * r());
         if (blen > 0.02) {
           bolt(X[i], Y[i], X[i] + Math.cos(dir) * blen, Y[i] + Math.sin(dir) * blen,
-            Math.max(2, levels - 2), w * 0.6, b * 0.7, depth + 1);
+            Math.max(2, levels - 2), w * 0.6, b * 0.7, depth + 1, t0 + f * len0);
         }
       }
     }
   }
-  bolt(-L / 2, 0, L / 2, 0, p.detail, p.width / 100, 1, 0);
-  return new Float64Array(segs);
+  bolt(-L / 2, 0, L / 2, 0, p.detail, p.width / 100, 1, 0, 0);
+  return { S: new Float64Array(segs), T: normArrivals(new Float64Array(T)) };
+}
+
+// Arrival times scaled so the latest is 1.
+function normArrivals(T) {
+  let m = 0;
+  for (let i = 0; i < T.length; i++) if (T[i] > m) m = T[i];
+  if (m > 0) for (let i = 0; i < T.length; i++) T[i] /= m;
+  return T;
+}
+
+// The part of each segment that has arrived by `amt` (0..1): the rest is dropped, and a segment
+// that is only partly there is cut short. Lets bolts strike and cracks spread over a flipbook.
+function revealSegments(S, T, amt) {
+  if (amt >= 1) return S;
+  const out = [];
+  for (let j = 0, i = 0; j < S.length; j += 6, i += 2) {
+    const a = T[i], b = T[i + 1];
+    if (a >= amt) continue;
+    const f = b <= amt ? 1 : (amt - a) / (b - a);
+    out.push(S[j], S[j + 1], S[j] + (S[j + 2] - S[j]) * f, S[j + 1] + (S[j + 3] - S[j + 1]) * f, S[j + 4], S[j + 5]);
+  }
+  return new Float64Array(out);
 }
 
 // Buckets segments into a grid of cells, so each pixel only measures the few segments near it.
@@ -159,7 +185,7 @@ const GEN = {
       { k: 'softIn', label: 'Inner softness', min: 0, max: 100, def: 100, unit: '%' },
       { k: 'softOut', label: 'Outer softness', min: 0, max: 100, def: 40, unit: '%' },
       { k: 'fill', label: 'Fill inside', min: 0, max: 100, def: 0, unit: '%' },
-      { k: 'dashes', label: 'Dashes', min: 0, max: 48, def: 0 },
+      { k: 'dashes', label: 'Dashes', min: 0, max: 48, def: 0, int: true },
       { k: 'gap', label: 'Gap', min: 5, max: 95, def: 50, unit: '%', show: (p) => p.dashes > 0 },
     ],
     cost: () => 1,
@@ -181,7 +207,7 @@ const GEN = {
   star: {
     label: 'Star / Flare', hint: 'Rays from the center: sparkles, glints, lens stars.', seeded: true,
     params: [
-      { k: 'rays', label: 'Rays', min: 2, max: 32, def: 4 },
+      { k: 'rays', label: 'Rays', min: 2, max: 32, def: 4, int: true },
       { k: 'length', label: 'Length', min: 5, max: 150, def: 95, unit: '%' },
       { k: 'width', label: 'Ray width', min: 0.2, max: 50, step: 0.1, def: 8, unit: '%' },
       { k: 'taper', label: 'Taper', min: 0, max: 100, def: 100, unit: '%', hint: 'How much each ray narrows toward its tip' },
@@ -277,7 +303,7 @@ const GEN = {
       { k: 'breakup', label: 'Edge breakup', min: 0, max: 100, def: 50, unit: '%', hint: 'How much the noise eats into the outline' },
       { k: 'kind', label: 'Noise', type: 'select', def: 'billow', options: NOISE_KINDS },
       { k: 'scale', label: 'Noise scale', min: 0.5, max: 16, step: 0.01, def: 2.5, log: true },
-      { k: 'detail', label: 'Detail', min: 1, max: 8, def: 5 },
+      { k: 'detail', label: 'Detail', min: 1, max: 8, def: 5, int: true },
       { k: 'rough', label: 'Roughness', min: 20, max: 80, def: 50, unit: '%', hint: 'Strength of the fine detail' },
       { k: 'warp', label: 'Swirl', min: 0, max: 200, def: 40, unit: '%' },
       { k: 'density', label: 'Density', min: 0, max: 100, def: 55, unit: '%' },
@@ -315,7 +341,7 @@ const GEN = {
       { k: 'curve', label: 'Fade curve', min: 0.2, max: 6, step: 0.01, def: 1.5, log: true, show: (p) => !p.seamless },
       { k: 'streaks', label: 'Streaks', min: 0, max: 100, def: 50, unit: '%' },
       { k: 'sScale', label: 'Streak scale', min: 1, max: 32, step: 0.1, def: 4, log: true, show: (p) => p.streaks > 0 },
-      { k: 'sDetail', label: 'Streak detail', min: 1, max: 6, def: 3, show: (p) => p.streaks > 0 },
+      { k: 'sDetail', label: 'Streak detail', min: 1, max: 6, def: 3, int: true, show: (p) => p.streaks > 0 },
       SEED,
     ],
     cost: (p) => 1 + (p.streaks > 0 ? p.sDetail : 0),
@@ -348,18 +374,19 @@ const GEN = {
     params: [
       { k: 'length', label: 'Length', min: 20, max: 300, def: 180, unit: '%' },
       { k: 'jag', label: 'Jaggedness', min: 0, max: 100, def: 45, unit: '%' },
-      { k: 'detail', label: 'Detail', min: 2, max: 9, def: 7 },
+      { k: 'detail', label: 'Detail', min: 2, max: 9, def: 7, int: true },
       { k: 'branches', label: 'Forks', min: 0, max: 100, def: 35, unit: '%' },
       { k: 'branchLen', label: 'Fork length', min: 5, max: 100, def: 50, unit: '%', show: (p) => p.branches > 0 },
       { k: 'width', label: 'Core width', min: 0.2, max: 10, step: 0.1, def: 2, unit: '%' },
       { k: 'thin', label: 'End taper', min: 0, max: 100, def: 50, unit: '%', hint: 'How much thinner and dimmer the bolt gets toward its end' },
       { k: 'glow', label: 'Glow size', min: 0, max: 60, step: 0.5, def: 12, unit: '%' },
       { k: 'glowAmt', label: 'Glow strength', min: 0, max: 100, def: 55, unit: '%', show: (p) => p.glow > 0 },
+      { k: 'reveal', label: 'Drawn', min: 0, max: 100, def: 100, unit: '%', hint: 'How much of the bolt is drawn from its start. Animate it for a strike' },
       SEED,
     ],
     cost: () => 3,
     prep(p, ctx) {
-      const S = buildBolt(p, ctx.seed), reach = p.glow / 100;
+      const b = buildBolt(p, ctx.seed), S = revealSegments(b.S, b.T, p.reveal / 100), reach = p.glow / 100;
       return { S, grid: segmentGrid(S, reach), reach, glow: reach > 0 ? p.glowAmt / 100 : 0 };
     },
     fill(s, xs, ys, out, n) {
@@ -389,9 +416,9 @@ const GEN = {
       { k: 'shape', label: 'Shape', type: 'select', def: 'circle',
         options: [['circle', 'Circle'], ['square', 'Square'], ['polygon', 'Polygon'], ['star', 'Star'], ['cross', 'Cross'], ['heart', 'Heart']] },
       { k: 'size', label: 'Size', min: 5, max: 150, def: 60, unit: '%' },
-      { k: 'sides', label: 'Sides', min: 3, max: 12, def: 6, show: (p) => p.shape === 'polygon' },
-      { k: 'points', label: 'Points', min: 3, max: 12, def: 5, show: (p) => p.shape === 'star' },
-      { k: 'depth', label: 'Point depth', min: 0, max: 100, def: 55, unit: '%', show: (p) => p.shape === 'star' },
+      { k: 'sides', label: 'Sides', min: 3, max: 12, def: 6, int: true, show: (p) => p.shape === 'polygon' },
+      { k: 'points', label: 'Points', min: 3, max: 12, def: 5, int: true, show: (p) => p.shape === 'star' },
+      { k: 'depth', label: 'Point depth', min: 0, max: 95, def: 45, unit: '%', show: (p) => p.shape === 'star' },
       { k: 'thick', label: 'Arm width', min: 5, max: 90, def: 32, unit: '%', show: (p) => p.shape === 'cross' },
       { k: 'round', label: 'Rounding', min: 0, max: 100, def: 0, unit: '%', show: (p) => p.shape !== 'circle' },
       { k: 'style', label: 'Style', type: 'select', def: 'fill', options: [['fill', 'Filled'], ['outline', 'Outline']] },
@@ -406,9 +433,9 @@ const GEN = {
       let sd;
       switch (p.shape) {
         case 'square': { const rr = rnd * R; sd = (x, y) => sdBox(x, y, R - rr, R - rr) - rr; break; }
-        case 'polygon': { const f = starSdf(p.sides, p.sides), rr = rnd * R * 0.5; sd = (x, y) => f(x, y, R - rr) - rr; break; }
+        case 'polygon': { const f = starSdf(p.sides, 2), rr = rnd * R * 0.5; sd = (x, y) => f(x, y, R - rr) - rr; break; }
         case 'star': {
-          const f = starSdf(p.points, lerp(p.points, 2, p.depth / 100)), rr = rnd * R * 0.3;
+          const f = starSdf(p.points, lerp(2, p.points, p.depth / 100)), rr = rnd * R * 0.3;
           sd = (x, y) => f(x, y, R - rr) - rr;
           break;
         }
@@ -447,7 +474,7 @@ const GEN = {
       { k: 'kind', label: 'Type', type: 'select', def: 'smooth', options: [...NOISE_KINDS, ['cells', 'Cells'], ['edges', 'Cell edges']] },
       { k: 'scale', label: 'Scale', min: 1, max: 32, step: 0.1, def: 4, log: true },
       { k: 'stretch', label: 'Stretch', min: 10, max: 1000, def: 100, unit: '%', log: true, hint: 'Above 100 % stretches the pattern sideways' },
-      { k: 'detail', label: 'Detail', min: 1, max: 8, def: 4 },
+      { k: 'detail', label: 'Detail', min: 1, max: 8, def: 4, int: true },
       { k: 'rough', label: 'Roughness', min: 20, max: 80, def: 50, unit: '%' },
       { k: 'warp', label: 'Swirl', min: 0, max: 200, def: 0, unit: '%', show: (p) => p.kind !== 'cells' && p.kind !== 'edges' },
       { k: 'density', label: 'Brightness', min: 0, max: 100, def: 50, unit: '%' },
@@ -478,4 +505,4 @@ const GEN = {
     },
   },
 };
-const GEN_ORDER = ['glow', 'ring', 'star', 'spark', 'smoke', 'trail', 'lightning', 'shape', 'noise'];
+// More generators are added to GEN in shapes-more.js, which also sets the menu order.

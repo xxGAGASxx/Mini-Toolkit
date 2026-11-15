@@ -254,6 +254,8 @@ function init() {
   $('#p-save').addEventListener('click', () => {
     const r = saveUserPreset();
     if (!r) { toast('This browser does not allow saving presets here.'); return; }
+    state.view.presets = 'mine';
+    saveView();
     renderPresets();
     toast(r === 'replaced' ? `Updated preset ${state.doc.name}.` : `Saved preset ${state.doc.name}. Rename the texture to save another.`);
   });

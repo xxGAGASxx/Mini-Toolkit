@@ -41,6 +41,7 @@ const ICONS = {
   pause: '<path d="M5.5 3.5v9M10.5 3.5v9"/>',
   fit: '<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>',
   restart: '<path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5"/>',
+  key: '<path d="M8 2.5 13.5 8 8 13.5 2.5 8Z"/>',
 };
 function icon(name) {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

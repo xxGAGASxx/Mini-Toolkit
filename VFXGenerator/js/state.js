@@ -5,7 +5,7 @@
 const KEY_DOC = `${APP_KEY}:doc`, KEY_PRESETS = `${APP_KEY}:presets`, KEY_VIEW = `${APP_KEY}:view`;
 
 const VIEW_DEF = {
-  tab: 'texture',
+  tab: 'texture', presets: 'still',
   bg: 'checker', bgColor: '#202329', channel: 'rgba', grid: true,                 // texture view
   emitter: 'single', blend: 'add', tint: '#ffffff', size: 60, fxBg: 'dark', fxColor: '#16181d', playing: true,  // preview
 };

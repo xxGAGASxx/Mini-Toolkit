@@ -31,13 +31,31 @@ const XFORM_DEFS = [
   { k: 'stretch', label: 'Stretch', min: 10, max: 1000, def: 100, unit: '%', log: true, hint: 'Widens (above 100 %) or narrows the layer sideways, before rotating' },
   { k: 'rot', label: 'Rotation', min: -180, max: 180, def: 0, unit: '°' },
 ];
-// Per-layer flipbook motion: values at the first and last frame.
+// Dissolve: noise eats the layer away, from 0 (none) to 100 % (all gone).
+const dissolving = (d, doc, L) => d.amt > 0 || has(L.k, 'd.amt');
+const DISSOLVE_DEFS = [
+  { k: 'amt', label: 'Dissolve', min: 0, max: 100, def: 0, unit: '%', hint: 'Noise eats the layer away. Animate it so smoke breaks apart instead of just fading' },
+  { k: 'soft', label: 'Edge softness', min: 0, max: 100, def: 25, unit: '%', show: dissolving },
+  { k: 'scale', label: 'Noise scale', min: 1, max: 32, step: 0.1, def: 5, log: true, show: dissolving },
+  { k: 'from', label: 'Starts from', type: 'select', def: 'all', show: dissolving,
+    options: [['all', 'Everywhere'], ['out', 'Outside'], ['in', 'Center'], ['bottom', 'Bottom'], ['top', 'Top'], ['left', 'Left'], ['right', 'Right']] },
+  { k: 'burn', label: 'Burning edge', min: 0, max: 100, def: 0, unit: '%', hint: 'A bright rim along the edge being eaten', show: dissolving },
+  { ...SEED, show: dissolving },
+];
+
+// Per-layer flipbook motion: values at the first and last frame, flicker and pulse.
+const notFull = (a, d, L) => !GEN[L.type].full;
 const MOTION_DEFS = [
-  { k: 'scA', label: 'Scale from', min: 0, max: 400, def: 100, unit: '%', show: (a, d, L) => !GEN[L.type].full },
-  { k: 'scB', label: 'Scale to', min: 0, max: 400, def: 100, unit: '%', show: (a, d, L) => !GEN[L.type].full },
+  { k: 'scA', label: 'Scale from', min: 0, max: 400, def: 100, unit: '%', show: notFull },
+  { k: 'scB', label: 'Scale to', min: 0, max: 400, def: 100, unit: '%', show: notFull },
   { k: 'opA', label: 'Opacity from', min: 0, max: 100, def: 100, unit: '%' },
   { k: 'opB', label: 'Opacity to', min: 0, max: 100, def: 100, unit: '%' },
-  { k: 'rot', label: 'Turn', min: -1080, max: 1080, def: 0, unit: '°', show: (a, d, L) => !GEN[L.type].full, hint: 'Degrees turned over the whole animation' },
+  { k: 'rot', label: 'Turn', min: -1080, max: 1080, def: 0, unit: '°', show: notFull, hint: 'Degrees turned over the whole animation' },
+  { k: 'flk', label: 'Flicker', min: 0, max: 100, def: 0, unit: '%', hint: 'Dims each frame by a random amount, up to this much' },
+  { k: 'pls', label: 'Pulse', min: 0, max: 100, def: 0, unit: '%', hint: 'Beats: dips and comes back, evenly over the animation' },
+  { k: 'plsN', label: 'Beats', min: 1, max: 16, def: 2, show: (a) => a.pls > 0, hint: 'Pulses over the whole animation; whole beats, so loops join up' },
+  { k: 'plsTo', label: 'Pulse in', type: 'select', def: 'op', show: (a, d, L) => a.pls > 0 && !GEN[L.type].full,
+    options: [['op', 'Brightness'], ['size', 'Size'], ['both', 'Both']] },
   { k: 'evo', label: 'Noise motion', min: 0, max: 8, step: 0.5, def: 0, show: (a, d, L) => !!GEN[L.type].evolve,
     hint: 'How far the noise drifts over the animation. In a loop it is rounded to whole steps so it joins up' },
   { k: 'reseed', label: 'New random shape each frame', type: 'check', def: false, show: (a, d, L) => !!GEN[L.type].seeded },
@@ -109,7 +127,37 @@ function cleanLayer(raw, ids) {
   ids.add(id);
   const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 40) : g.label;
   return { id, type: raw.type, name, on: raw.on !== false, ...cleanBy(LAYER_DEFS, raw), ...cleanBy(XFORM_DEFS, raw),
-    p: cleanBy(g.params, raw.p), a: cleanBy(MOTION_DEFS, raw.a) };
+    p: cleanBy(g.params, raw.p), d: cleanBy(DISSOLVE_DEFS, raw.d), a: cleanBy(MOTION_DEFS, raw.a), k: cleanKeys(raw.type, raw.k) };
+}
+
+/* ---------- animated settings */
+// A layer's k maps a slider to its value at the end of the flipbook: 'p.radius' for a generator
+// setting, 'd.amt' for a dissolve setting. The setting itself holds the value at the start.
+const defMaps = new Map();
+function keyDef(type, key) {
+  const dot = key.indexOf('.'), grp = key.slice(0, dot);
+  const defs = grp === 'p' ? GEN[type] && GEN[type].params : grp === 'd' ? DISSOLVE_DEFS : null;
+  if (!defs) return null;
+  let m = defMaps.get(defs);
+  if (!m) defMaps.set(defs, (m = new Map(defs.map((d) => [d.k, d]))));
+  const def = m.get(key.slice(dot + 1));
+  return def && (def.type || 'range') === 'range' ? def : null;
+}
+function cleanKeys(type, raw) {
+  const o = {};
+  if (raw && typeof raw === 'object') {
+    for (const key of Object.keys(raw).slice(0, 64)) {
+      const def = keyDef(type, key);
+      if (def && isNum(raw[key])) o[key] = cleanVal(def, raw[key]);
+    }
+  }
+  return o;
+}
+// The settings of group grp ('p' or 'd') with their end values, as at the last frame.
+function withEnds(L, grp, src) {
+  const o = { ...src };
+  for (const key in L.k) if (key.startsWith(`${grp}.`)) o[key.slice(grp.length + 1)] = L.k[key];
+  return o;
 }
 // over: any layer fields, with p (generator settings) and a (motion) as partial objects.
 const makeLayer = (type, over = {}) => cleanLayer({ name: GEN[type].label, ...over, type }, new Set());
@@ -166,6 +214,7 @@ const RAMP_PRESETS = {
   Smoke: [[0, '#1b1b1f'], [60, '#6b6f78'], [100, '#d9dce2']],
   Blood: [[0, '#140000'], [55, '#6e0008'], [100, '#d0102a']],
   Heal: [[0, '#00241a'], [45, '#12b886'], [80, '#9dffc8'], [100, '#ffffff']],
+  Slime: [[0, '#0b2605'], [55, '#2f9e1a'], [90, '#8fe04a'], [100, '#c8f77a']],
 };
 for (const k in RAMP_PRESETS) RAMP_PRESETS[k] = RAMP_PRESETS[k].map(([p, c]) => ({ p, c, a: 100 }));
 

@@ -19,12 +19,30 @@ function animAt(anim, k) {
   return { t, s: EASE[anim.ease](t) };
 }
 
-// One layer at frame k, ready to evaluate: its generator prepared, and the transform from frame
-// space into layer space (move, then rotate back, then undo scale and stretch).
-function prepLayer(L, doc, k, ax, ay) {
+// Settings of group grp ('p' generator, 'd' dissolve) at position s (0..1) between their own
+// values and their end values in L.k. Counts stay whole.
+function settingsAt(L, grp, src, s) {
+  let o = src;
+  for (const key in L.k) {
+    if (!key.startsWith(grp) || key[grp.length] !== '.') continue;
+    const def = keyDef(L.type, key);
+    if (!def) continue;
+    if (o === src) o = { ...src };
+    const v = lerp(src[def.k], L.k[key], s);
+    o[def.k] = def.int ? Math.round(v) : v;
+  }
+  return o;
+}
+
+// One layer at frame k, ready to evaluate: its generator and dissolve prepared, and the
+// transform from frame space into layer space (move, then rotate back, then undo scale and
+// stretch). li is the layer's place in the stack, which varies its flicker.
+function prepLayer(L, doc, k, ax, ay, li = 0) {
   const g = GEN[L.type], A = L.a, an = doc.anim.on ? animAt(doc.anim, k) : null;
-  let scale = L.scale / 100, op = L.opacity / 100, rot = L.rot, seed = L.p.seed || 0, z = 0, pz = 0;
+  let p = L.p, d = L.d, scale = L.scale / 100, op = L.opacity / 100, rot = L.rot, seed = L.p.seed || 0, z = 0, pz = 0;
   if (an) {
+    p = settingsAt(L, 'p', p, an.s);
+    d = settingsAt(L, 'd', d, an.s);
     scale *= lerp(A.scA, A.scB, an.s) / 100;
     op *= lerp(A.opA, A.opB, an.s) / 100;
     rot += A.rot * (doc.anim.loop ? an.t : an.s);
@@ -32,11 +50,55 @@ function prepLayer(L, doc, k, ax, ay) {
       if (doc.anim.loop) { pz = Math.max(1, Math.round(A.evo)); z = an.t * pz; } else z = an.s * A.evo;
     }
     if (A.reseed && g.seeded) seed += k * 7919;
+    if (A.flk > 0) op *= 1 - (A.flk / 100) * (hash3(k, li, 0x6b1f) / 4294967296);
+    if (A.pls > 0) {
+      // Whole beats over the animation, at full strength on the first frame.
+      const dip = (A.pls / 100) * (1 - Math.cos(TAU * A.plsN * an.t)) / 2;
+      if (A.plsTo !== 'size') op *= 1 - dip;
+      if (A.plsTo !== 'op' && !g.full) scale *= 1 - 0.5 * dip;
+    }
   }
   scale = Math.max(scale, 1e-3);
   const r = -rot * DEG;
-  return { g, st: g.prep(L.p, { seed, z, pz, ax, ay }), op, blend: L.blend, inv: L.invert, ch: doc.color.mode === 'pack' ? CH[L.ch] : 0,
+  return { g, st: g.prep(p, { seed, z, pz, ax, ay }), op, blend: L.blend, inv: L.invert, ch: doc.color.mode === 'pack' ? CH[L.ch] : 0,
+    dis: d.amt > 0 ? prepDissolve(d, !!g.full, ax, ay) : null,
     full: !!g.full, x: L.x / 100, y: L.y / 100, c: Math.cos(r), s: Math.sin(r), isx: 1 / ((scale * L.stretch) / 100), isy: 1 / scale };
+}
+
+/* ---------- dissolve */
+const DIS_FROM = { all: 0, out: 1, in: 2, bottom: 3, top: 4, left: 5, right: 6 };
+
+function prepDissolve(d, full, ax, ay) {
+  const soft = Math.max((d.soft / 100) * 0.4, 0.004), bw = soft + 0.06;
+  // Full-frame layers get whole noise cells across the frame, so a tiling layer still tiles.
+  const fx = full ? Math.max(1, Math.round(d.scale * ax)) : 0, fy = full ? Math.max(1, Math.round(d.scale * ay)) : 0;
+  return { P: perm(d.seed + 1000003), k: d.scale / 2, fx, fy, full, ax, ay, from: DIS_FROM[d.from], soft, sb: bw,
+    burn: (d.burn / 100) * 2, t0: lerp(-bw, 1, d.amt / 100) };
+}
+
+// Each point gets a key 0..1: noise, spread evenly (the noise is bunched near 0.5), mixed with a
+// gradient when the dissolve starts from a side. Points with keys below the threshold are gone;
+// the threshold climbs from below 0 to 1 as the amount goes 0 -> 100 %.
+function dissolve(D, xs, ys, val, n) {
+  const { P, k, fx, fy, full, ax, ay, from, soft, sb, burn, t0 } = D;
+  for (let i = 0; i < n; i++) {
+    const v = val[i];
+    if (v <= 0) continue;
+    let x, y, nx, ny;
+    if (full) { nx = xs[i] * fx; ny = ys[i] * fy; x = (xs[i] * 2 - 1) * ax; y = (1 - ys[i] * 2) * ay; }
+    else { x = xs[i]; y = ys[i]; nx = x * k; ny = y * k; }
+    let key = 1 / (1 + Math.exp((0.5 - noise01(fractal(P, nx, ny, 0.5, 4, 0.5, 0, fx, fy, 0), 0)) * 8.5));
+    if (from) {
+      const g = from === 1 ? 1 - Math.sqrt(x * x + y * y) : from === 2 ? Math.sqrt(x * x + y * y)
+        : from === 3 ? (y + 1) / 2 : from === 4 ? (1 - y) / 2 : from === 5 ? (x + 1) / 2 : (1 - x) / 2;
+      key = key * 0.35 + clamp01(g) * 0.65;
+    }
+    const dd = key - t0;
+    if (dd <= 0) { val[i] = 0; continue; }
+    let m = dd >= soft ? 1 : smooth01(dd / soft);
+    if (burn > 0 && dd < sb) m += burn * (1 - smooth01(dd / sb));
+    val[i] = v * m;
+  }
 }
 
 // 0 at the edge, 1 once `d` (distance in from the edge, 0..1) passes the fade width.
@@ -83,7 +145,7 @@ function* renderDoc(doc, opt) {
 
   for (let k = 0; k < n; k++) {
     const frame = opt.single ? Math.min(opt.at || 0, sh.n - 1) : k;
-    const layers = visible.map((L) => prepLayer(L, doc, frame, ax, ay)).filter((P) => P.op > 0);
+    const layers = visible.map((L) => prepLayer(L, doc, frame, ax, ay, doc.layers.indexOf(L))).filter((P) => P.op > 0);
     const fx0 = (k % cols) * W, fy0 = Math.floor(k / cols) * H;
 
     for (let oy = 0; oy < H; oy += rpb) {
@@ -110,6 +172,7 @@ function* renderDoc(doc, opt) {
         }
         P.g.fill(P.st, xs, ys, val, cnt);
         if (P.inv) for (i = 0; i < cnt; i++) val[i] = 1 - clamp01(val[i]);
+        if (P.dis) dissolve(P.dis, xs, ys, val, cnt);
         const o = P.ch * cap, op = P.op;
         switch (P.blend) {
           case 'screen':
@@ -187,7 +250,12 @@ function* renderDoc(doc, opt) {
 // Rough amount of work, to decide between rendering at once and rendering in the background.
 function renderCost(doc, w, h, ss, frames) {
   let per = 0.5;
-  for (const L of doc.layers) if (L.on && L.opacity > 0) per += GEN[L.type].cost(L.p) + 0.5;
+  for (const L of doc.layers) {
+    if (!(L.on && L.opacity > 0)) continue;
+    const p = frames > 1 ? withEnds(L, 'p', L.p) : L.p;   // the costlier end is a fair guess
+    per += Math.max(GEN[L.type].cost(L.p), GEN[L.type].cost(p)) + 0.5;
+    if (L.d.amt > 0 || (frames > 1 && has(L.k, 'd.amt'))) per += 4;
+  }
   return frames * w * h * ss * ss * per;
 }
 

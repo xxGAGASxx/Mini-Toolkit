@@ -99,6 +99,55 @@ function controls(defs, obj, ctx = () => [state.doc, null]) {
     def.show ? () => { const o = obj(); return !!o && def.show(o, ...ctx()); } : null));
 }
 
+// Rows for a layer's generator (grp 'p') or dissolve ('d') settings. While the flipbook is on,
+// each slider gets a ◆ button that gives it an end value in L.k, edited in a second row under
+// it. A row shows when it applies at the start or, if animated, at the end.
+function keyedControls(grp, defs, layer, animOn) {
+  const obj = () => { const L = layer(); return L && L[grp]; };
+  return defs.flatMap((def) => {
+    const key = `${grp}.${def.k}`;
+    const shows = () => {
+      const L = layer();
+      if (!L) return false;
+      if (!def.show) return true;
+      return !!def.show(L[grp], state.doc, L) || (animOn && !!def.show(withEnds(L, grp, L[grp]), state.doc, L));
+    };
+    const base = control(def, () => obj()[def.k], (v, commit) => { const o = obj(); if (!o) return; o[def.k] = v; changed(commit); },
+      def.show ? shows : null);
+    if (!animOn || (def.type || 'range') !== 'range') return [base];
+
+    const keyed = () => { const L = layer(); return !!L && has(L.k, key); };
+    const btn = h('button.key', { type: 'button', 'aria-label': `Animate ${def.label}` }, icon('key'));
+    btn.addEventListener('click', () => {
+      const L = layer();
+      if (!L) return;
+      if (has(L.k, key)) delete L.k[key]; else L.k[key] = L[grp][def.k];
+      changed(true);
+    });
+    base.el.classList.add('keyed');
+    base.el.append(btn);
+    const end = control({ ...def, label: '→ last frame', hint: `${def.label} at the end of the animation` },
+      () => { const L = layer(); return keyed() ? L.k[key] : L[grp][def.k]; },
+      (v, commit) => { const L = layer(); if (!L) return; L.k[key] = v; changed(commit); },
+      () => keyed() && shows());
+    end.el.classList.add('keyed', 'end');
+    end.el.append(h('span'));
+    const endLabel = end.el.querySelector('label');
+    return [{
+      el: base.el,
+      sync() {
+        base.sync();
+        const on = keyed();
+        btn.setAttribute('aria-pressed', String(on));
+        btn.title = on ? 'Animated: click to stop animating this setting' : 'Animate: give this setting a different value at the end of the flipbook';
+      },
+    }, {
+      el: end.el,
+      sync() { end.sync(); endLabel.textContent = state.doc.anim.loop ? '→ halfway' : '→ last frame'; },
+    }];
+  });
+}
+
 /* ---------- thumbnails, drawn a few at a time when the page is idle */
 const thumbQueue = new Map();   // canvas -> function returning [doc, w, h, frame]
 let thumbTimer = 0;
@@ -158,7 +207,7 @@ function renderLayers() {
       eye.title = L.on ? 'Hide layer (H)' : 'Show layer (H)';
     }
     // The layer drawn alone, white on dark, at the frame's aspect.
-    const tkey = JSON.stringify([doc.w, doc.h, L.type, L.p, L.x, L.y, L.scale, L.stretch, L.rot, L.invert]);
+    const tkey = JSON.stringify([doc.w, doc.h, L.type, L.p, L.d, L.x, L.y, L.scale, L.stretch, L.rot, L.invert]);
     if (lst.thumbs.get(L.id) !== tkey) {
       lst.thumbs.set(L.id, tkey);
       const canvas = li.querySelector('canvas');
@@ -186,9 +235,15 @@ function initLayerList() {
     requestAnimationFrame(() => { const n = $('#layer-name'); if (n) { n.focus(); n.select(); } });
   });
 
-  const menu = $('#add-menu'), addBtn = $('#l-add');
-  menu.replaceChildren(...GEN_ORDER.map((t) => h('button.menu-item', { type: 'button', role: 'menuitem', dataset: { type: t } },
-    h('strong', { text: GEN[t].label }), h('span', { text: GEN[t].hint }))));
+  // Two columns of names; the line at the bottom describes the one pointed at or focused.
+  const menu = $('#add-menu'), addBtn = $('#l-add'), about = h('p.menu-hint', { 'aria-live': 'polite' });
+  const describe = (t) => { about.textContent = t ? GEN[t].hint : 'Pick a layer type. It goes above the selected layer.'; };
+  menu.replaceChildren(...GEN_ORDER.map((t) => h('button.menu-item', { type: 'button', role: 'menuitem', title: GEN[t].hint, dataset: { type: t } },
+    GEN[t].label)), about);
+  describe(null);
+  const hovered = (e) => { const b = e.target.closest('.menu-item'); if (b) describe(b.dataset.type); };
+  menu.addEventListener('pointerover', hovered);
+  menu.addEventListener('focusin', hovered);
   const close = () => { menu.hidden = true; addBtn.setAttribute('aria-expanded', 'false'); };
   addBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -296,9 +351,10 @@ function buildLayerPanel(root, id, type, animOn) {
   root.append(section(g.label, null,
     name,
     h('p.hint', { text: g.hint }),
-    rows(controls(g.params, () => cur() && cur().p, ctx))));
+    rows(keyedControls('p', g.params, cur, animOn))));
 
   root.append(section('Blend', null, rows(controls(LAYER_DEFS, cur, ctx))));
+  root.append(section('Dissolve', null, rows(keyedControls('d', DISSOLVE_DEFS, cur, animOn))));
 
   if (!g.full) {
     const reset = h('button.chip', { type: 'button', text: 'Reset', title: 'Back to the center, no scale, stretch or rotation' });
@@ -312,14 +368,14 @@ function buildLayerPanel(root, id, type, animOn) {
   }
 
   if (animOn) {
-    const reset = h('button.chip', { type: 'button', text: 'Reset', title: 'No motion for this layer' });
+    const reset = h('button.chip', { type: 'button', text: 'Reset', title: 'No motion for this layer, and no animated settings' });
     reset.addEventListener('click', () => {
       const L = cur();
-      if (L) { L.a = defaultsOf(MOTION_DEFS); changed(true); }
+      if (L) { L.a = defaultsOf(MOTION_DEFS); L.k = {}; changed(true); }
     });
     root.append(section('Motion', reset,
       rows(controls(MOTION_DEFS, () => cur() && cur().a, ctx)),
-      h('p.hint', { text: 'Values at the first and last frame of the flipbook, for this layer.' })));
+      h('p.hint', { text: 'Values at the first and last frame of the flipbook, for this layer. Click ◆ beside any slider above to animate it as well.' })));
   }
 }
 
@@ -399,19 +455,33 @@ function renderPresets() {
     else setDoc(d);
   };
   const hint = 'Click to open · Shift+click to add its layers to the current texture';
-  const tiles = PRESETS.map((pr) => {
-    const make = () => presetDoc(pr, state.doc);
-    return tile(pr.name, hint, () => presetDoc(pr, base), pick(make));
-  });
-  const mine = userPresets().map((up) => {
-    const make = () => userPresetDoc(up.doc, state.doc);
-    return tile(up.name, `${hint} (saved in this browser)`, () => userPresetDoc(up.doc, base), pick(make), () => {
-      deleteUserPreset(up.name);
-      renderPresets();
-      toast(`Deleted preset ${up.name}.`);
+  const saved = userPresets();
+
+  // One group at a time, picked with the tabs: the built-in groups, then those saved here.
+  const groups = [...PRESET_GROUPS, ['mine', saved.length ? `Saved ${saved.length}` : 'Saved', 'Presets saved in this browser']];
+  if (!groups.some((g) => g[0] === state.view.presets)) state.view.presets = groups[0][0];
+  const cur = state.view.presets;
+  $('#preset-tabs').replaceChildren(...groups.map(([id, label, title]) => {
+    const b = h('button', { type: 'button', role: 'tab', 'aria-selected': String(id === cur), 'aria-controls': 'presets', title, text: label });
+    b.addEventListener('click', () => { state.view.presets = id; saveView(); renderPresets(); });
+    return b;
+  }));
+
+  let tiles;
+  if (cur === 'mine') {
+    tiles = saved.map((up) => {
+      const make = () => userPresetDoc(up.doc, state.doc);
+      return tile(up.name, `${hint} (saved in this browser)`, () => userPresetDoc(up.doc, base), pick(make), () => {
+        deleteUserPreset(up.name);
+        renderPresets();
+        toast(`Deleted preset ${up.name}.`);
+      });
     });
-  });
-  grid.replaceChildren(...tiles, ...(mine.length ? [h('div.pdiv', { text: 'Saved in this browser' }), ...mine] : []));
+    if (!tiles.length) tiles = [h('p.hint.pempty', { text: 'Nothing saved yet. Name the texture, then use Save current.' })];
+  } else {
+    tiles = PRESETS.filter((pr) => pr.group === cur).map((pr) => tile(pr.name, hint, () => presetDoc(pr, base), pick(() => presetDoc(pr, state.doc))));
+  }
+  grid.replaceChildren(...tiles);
 }
 
 function appendLayers(layers) {
