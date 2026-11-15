@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VFX Texture Generator</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true"></span>VFX Texture Generator</div>
+  <input class="docname" id="doc-name" type="text" maxlength="60" spellcheck="false"
+         aria-label="Texture name" title="Name of the texture, used for file names and saved presets">
+  <div class="hist">
+    <button class="ibtn" id="btn-undo" type="button" data-icon="undo" aria-label="Undo" title="Undo (Ctrl+Z)" disabled></button>
+    <button class="ibtn" id="btn-redo" type="button" data-icon="redo" aria-label="Redo" title="Redo (Ctrl+Y)" disabled></button>
+  </div>
+  <div class="filebtns">
+    <button class="btn" id="btn-new" type="button" title="Start a new texture (undoable)">New</button>
+    <button class="btn" id="btn-open" type="button" title="Open a .json file or a PNG exported from this tool (Ctrl+O)">Open…</button>
+    <button class="btn" id="btn-save" type="button" title="Save the settings (Ctrl+S)">Save <small>.json</small></button>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="app">
+  <!-- LEFT: layers and the selected layer's settings -->
+  <aside class="side side-l" aria-label="Layers">
+    <section class="sec">
+      <div class="sec-head"><h2>Layers</h2><span class="hint">Top layer first</span></div>
+      <ol class="layers" id="layer-list" aria-label="Layers, top first"></ol>
+      <p class="hint" id="layer-empty" hidden>No layers yet. Add one, or pick a preset.</p>
+      <div class="lbtns">
+        <div class="addwrap">
+          <button class="btn primary" id="l-add" type="button" data-icon="plus" aria-haspopup="menu" aria-expanded="false">Add layer</button>
+          <div class="menu" id="add-menu" role="menu" aria-label="Layer types" hidden></div>
+        </div>
+        <button class="btn icon" id="l-dup" type="button" data-icon="copy" aria-label="Duplicate layer" title="Duplicate layer (Ctrl+D)"></button>
+        <button class="btn icon" id="l-up" type="button" data-icon="up" aria-label="Move layer up" title="Move up"></button>
+        <button class="btn icon" id="l-down" type="button" data-icon="down" aria-label="Move layer down" title="Move down"></button>
+        <button class="btn icon" id="l-del" type="button" data-icon="trash" aria-label="Delete layer" title="Delete layer (Del)"></button>
+      </div>
+    </section>
+    <div id="layer-props"></div>
+  </aside>
+
+  <!-- CENTER: texture and preview -->
+  <main class="center">
+    <div class="vbar">
+      <div class="tabs" id="view-tabs" role="tablist" aria-label="View">
+        <button role="tab" id="tab-texture" data-view="texture" aria-controls="stage" type="button">Texture</button>
+        <button role="tab" id="tab-preview" data-view="preview" aria-controls="stage" type="button">Preview</button>
+      </div>
+      <div class="vtools" id="bar-tex">
+        <label class="mini">Background
+          <select id="v-bg">
+            <option value="checker">Dark checker</option><option value="checker-light">Light checker</option>
+            <option value="black">Black</option><option value="gray">Gray</option><option value="white">White</option>
+            <option value="custom">Color</option>
+          </select>
+        </label>
+        <input type="color" id="v-bgcolor" aria-label="Background color">
+        <label class="mini">Show
+          <select id="v-channel">
+            <option value="rgba">Color</option><option value="r">Red</option><option value="g">Green</option>
+            <option value="b">Blue</option><option value="a">Alpha</option>
+          </select>
+        </label>
+        <label class="check" id="v-grid-wrap"><input type="checkbox" id="v-grid"><span>Frame grid</span></label>
+        <div class="zoom">
+          <button class="btn icon" id="zoom-minus" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+          <button class="btn zoomval" id="zoom-1" type="button" title="Actual size"><span id="zoom-out">100%</span></button>
+          <button class="btn icon" id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+          <button class="btn icon" id="zoom-fit" type="button" data-icon="fit" aria-label="Fit" title="Fit (F)"></button>
+        </div>
+      </div>
+      <div class="vtools" id="bar-fx" hidden>
+        <select id="fx-emitter" aria-label="Emitter" title="How sprites are spawned"></select>
+        <select id="fx-blend" aria-label="Blend mode" title="How sprites are drawn over the background">
+          <option value="add">Additive</option><option value="alpha">Alpha blend</option>
+        </select>
+        <label class="mini">Tint <input type="color" id="fx-tint"></label>
+        <label class="mini">Size <input type="range" id="fx-size" min="10" max="100" step="1"></label>
+        <select id="fx-bg" aria-label="Preview background" title="Background">
+          <option value="dark">Dark</option><option value="black">Black</option><option value="gray">Gray</option>
+          <option value="white">White</option><option value="checker">Checker</option><option value="custom">Color</option>
+        </select>
+        <input type="color" id="fx-color" aria-label="Preview background color">
+        <div class="zoom">
+          <button class="btn icon" id="fx-play" type="button"></button>
+          <button class="btn icon" id="fx-restart" type="button" data-icon="restart" aria-label="Restart" title="Restart"></button>
+        </div>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="tex-canvas" tabindex="0" aria-label="Texture. Drag to move the selected layer, wheel to zoom"></canvas>
+      <canvas id="fx-canvas" aria-label="Preview of the texture on sprites" hidden></canvas>
+      <div class="progress" id="progress" hidden><div></div></div>
+      <div class="stage-msg" id="stage-msg" hidden></div>
+    </div>
+    <p class="hint view-hint" id="view-hint"></p>
+  </main>
+
+  <!-- RIGHT: presets and texture settings -->
+  <aside class="side side-r" aria-label="Texture settings">
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Presets</h2>
+        <button class="chip" id="p-save" type="button" title="Save the current texture as a preset in this browser, under its name">Save current</button>
+      </div>
+      <div class="presets" id="presets"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Size</h2>
+      <div class="ctrls" id="size-ctrls"></div>
+      <div class="chips" id="size-chips" aria-label="Square sizes"></div>
+    </section>
+
+    <section class="sec" id="sec-color">
+      <h2>Color</h2>
+      <div class="ctrls" id="color-ctrls"></div>
+      <div class="ramp" id="ramp" hidden></div>
+      <p class="hint" id="color-hint"></p>
+    </section>
+
+    <section class="sec">
+      <h2>Edges</h2>
+      <div class="ctrls" id="edge-ctrls"></div>
+      <p class="hint" id="edge-info" hidden></p>
+    </section>
+
+    <section class="sec">
+      <h2>Flipbook</h2>
+      <div class="ctrls" id="anim-ctrls"></div>
+      <p class="hint mono" id="anim-info" hidden></p>
+    </section>
+
+    <section class="sec export">
+      <h2>Export</h2>
+      <div class="ctrls" id="out-ctrls"></div>
+      <button class="btn primary ex" id="ex-png" type="button" title="Export PNG (Ctrl+E)">Export PNG</button>
+      <button class="btn ex" id="ex-copy" type="button" title="Copy the texture as an 8-bit PNG">Copy image</button>
+      <p class="hint" id="ex-note"></p>
+    </section>
+  </aside>
+</div>
+
+<input type="file" id="file" accept=".json,.png,application/json,image/png" hidden>
+<div class="filedrop" id="drop" hidden><div>Drop a .json file or a PNG from this tool to open it.<br>Drop an image on the Color section to use its colors as the ramp.</div></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Plain scripts, not modules, so the page works opened straight from disk. They share one
+     global scope, in this order: each file may use what the files before it define. -->
+<script src="js/util.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/shapes.js"></script>
+<script src="js/model.js"></script>
+<script src="js/presets.js"></script>
+<script src="js/render.js"></script>
+<script src="js/png.js"></script>
+<script src="js/state.js"></script>
+<script src="js/ramp.js"></script>
+<script src="js/panels.js"></script>
+<script src="js/views.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

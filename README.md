@@ -64,3 +64,15 @@ Tools marked **Needs internet** load a library from a CDN (cdn.jsdelivr.net / un
 - Opens WAV, AIFF, MP3, OGG, Opus, FLAC, M4A / AAC and the sound of MP4 / WebM videos at their own sample rate. WAV cue points become splits
 - Export WAV (16 / 24-bit, 32-bit float, splits saved as cue points), FLAC, MP3, Opus (.ogg), at any common sample rate, mono or stereo
 - Open `AudioTools/audio-tools.html`. Works offline. Includes two libraries in `AudioTools/vendor/`: Signalsmith Stretch (MIT) for speed and pitch, and lamejs (LGPL) for MP3; see `AudioTools/vendor/README.md`
+
+### VFX Texture Generator
+- Particle and effect textures built from layers: glow, ring, star / flare, spark / streak, smoke / cloud, trail, lightning, shape (circle, square, polygon, star, cross, heart) and noise (smooth, puffy, ridged, cells, cell edges)
+- Each layer has position, scale, stretch, rotation, opacity, invert and a blend mode (add, screen, lighten, mask, subtract). Drag in the view to move a layer, Shift+drag to turn it, Alt+drag to scale it
+- Color: white + alpha (tint in the engine), grayscale on black, a color ramp (with presets, or taken from any image), or pack layers into the R / G / B / A channels
+- Intensity and gamma; edge fade (round, square, top and bottom), with a warning when the frame edges are not fully transparent
+- Flipbook: 2–64 frames on one sheet, animating scale, opacity, rotation, noise motion and new random shapes per frame; seamless loops or eased one-shots
+- Preview the texture on sprites: one sprite or a burst, fountain or rising particles, additive or alpha blend, with tint and background
+- Up to 2048 px frames (4096 px sheets), with 2× or 4× supersampling. Noise can tile seamlessly
+- Export 8-bit (dithered) or 16-bit PNG, straight or premultiplied alpha; the PNG keeps the settings, so it opens again for editing. Save / open .json
+- 16 presets, your own presets saved in the browser, undo / redo, autosave
+- Open `VFXGenerator/vfx-generator.html`. Works offline
