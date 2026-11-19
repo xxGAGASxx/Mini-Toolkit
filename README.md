@@ -17,6 +17,9 @@ Tools marked **Needs internet** load a library from a CDN (cdn.jsdelivr.net / un
 ### MD Comparer
 - compare 2 or more md files
 
+### JSON - CSV - YAML
+- convert between these types
+
 ### Text Toolkit
 - Text case converter, image to text converter
 - **Needs internet** for image to text (loads the Tesseract.js OCR engine and language data). The case converter works offline.
